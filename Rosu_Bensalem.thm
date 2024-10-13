@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view nodetheme="Martha">
+
+<defaultnode showlabel="no"/>
+
+<defaultedge/>
+
+<node>
+   <type name="Int"/>
+   <type name="Interval"/>
+   <type name="P"/>
+   <type name="Proposition"/>
+   <type name="String"/>
+   <type name="seq/Int"/>
+   <set name="$Ongoing_t" type="Interval"/>
+</node>
+
+<node visible="no">
+   <type name="T"/>
+   <type name="univ"/>
+</node>
+
+<node visible="no" style="inherit">
+   <set name="this/Ongoing" type="Interval"/>
+</node>
+
+<node visible="yes" color="Green">
+   <set name="$Starting" type="Interval"/>
+</node>
+
+<node visible="yes" color="Red">
+   <set name="$Terminating" type="Interval"/>
+</node>
+
+<node visible="yes" style="Dashed" color="White" label="$Ongoing">
+   <set name="$Ongoing_Visual" type="Interval"/>
+</node>
+
+<node visible="yes" style="inherit" color="White">
+   <set name="this/Active" type="Proposition"/>
+</node>
+
+</view>
+
+</alloy>
