@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view nodetheme="Martha">
+
+<defaultnode/>
+
+<defaultedge/>
+
+<node>
+   <type name="Fail"/>
+   <type name="FindNode"/>
+   <type name="Int"/>
+   <type name="Join"/>
+   <type name="Leave"/>
+   <type name="Lookup"/>
+   <type name="Member"/>
+   <type name="MembershipOperation"/>
+   <type name="Operation"/>
+   <type name="Responsible"/>
+   <type name="Store"/>
+   <type name="String"/>
+   <type name="Value"/>
+   <type name="ATL/Boundary"/>
+   <type name="ATL/Interval"/>
+   <type name="ATL/P"/>
+   <type name="ATL/Proposition"/>
+   <type name="ATL/T"/>
+   <type name="seq/Int"/>
+   <set name="$Key_Consistency_f1" type="FindNode"/>
+   <set name="$Key_Consistency_f2" type="FindNode"/>
+   <set name="$Key_Consistency_ideal" type="IdealState"/>
+   <set name="ATL/Active" type="ATL/Proposition"/>
+   <set name="ATL/Ending" type="ATL/Interval"/>
+   <set name="ATL/Happens" type="ATL/Boundary"/>
+   <set name="ATL/Starting" type="ATL/Interval"/>
+</node>
+
+<node showlabel="no" color="Green">
+   <set name="$A_Starting" type="ATL/Interval"/>
+</node>
+
+<node showlabel="no" color="Red">
+   <set name="$B_Ending" type="ATL/Interval"/>
+</node>
+
+<node showlabel="no" color="Yellow">
+   <set name="$Visual_Member" type="Node"/>
+</node>
+
+<node visible="no">
+   <type name="Key"/>
+   <type name="univ"/>
+   <set name="ATL/Ongoing" type="ATL/Interval"/>
+</node>
+
+<node visible="no" label="Ideal">
+   <type name="IdealState"/>
+</node>
+
+<node visible="no" label="ReadOnly">
+   <type name="ReadOnlyRegimen"/>
+</node>
+
+<node visible="no" label="Stable">
+   <type name="StableRegimen"/>
+</node>
+
+<node visible="yes" shape="Circle" color="Red">
+   <type name="Node"/>
+</node>
+
+<node visible="yes" showlabel="no" color="White">
+   <set name="$C_Ongoing_Visual" type="ATL/Interval"/>
+</node>
+
+<edge attribute="yes">
+   <relation name="key"> <type name="Responsible"/> <type name="Key"/> </relation>
+   <relation name="node"> <type name="MembershipOperation"/> <type name="Node"/> </relation>
+   <relation name="node"> <type name="Responsible"/> <type name="Node"/> </relation>
+   <relation name="value"> <type name="Lookup"/> <type name="Value"/> </relation>
+   <relation name="value"> <type name="Store"/> <type name="Value"/> </relation>
+</edge>
+
+<edge visible="no" attribute="yes">
+   <relation name="key"> <type name="Operation"/> <type name="Key"/> </relation>
+   <relation name="responsible"> <type name="FindNode"/> <type name="Node"/> </relation>
+</edge>
+
+<edge visible="no" attribute="yes" label="Responsible">
+   <relation name="$Visual_Responsible"> <type name="Node"/> <type name="Key"/> </relation>
+</edge>
+
+</view>
+
+</alloy>

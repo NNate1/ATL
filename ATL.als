@@ -76,6 +76,9 @@ pred Singleton[i : Interval] {
 	eventually (Starting[i] and Ending[i])
 }
 
+pred Initial[i : Interval] {
+	Starting[i]
+}
 
 // Auxiliary Predicate Encoding	
 fact { 
