@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view nodetheme="Martha">
+
+<defaultnode showlabel="no"/>
+
+<defaultedge/>
+
+<node>
+   <type name="Election"/>
+   <type name="Fail"/>
+   <type name="Int"/>
+   <type name="Message"/>
+   <type name="String"/>
+   <type name="univ"/>
+   <type name="ALTL/P"/>
+   <type name="ALTL/T"/>
+   <type name="seq/Int"/>
+   <set name="ALTL/Active" type="ALTL/Proposition"/>
+   <set name="ALTL/Happens" type="ALTL/Boundary"/>
+   <set name="ALTL/Starting" type="ALTL/Interval"/>
+</node>
+
+<node color="Green">
+   <set name="$Starting" type="ALTL/Interval"/>
+</node>
+
+<node color="Red">
+   <set name="ALTL/Ending" type="ALTL/Interval"/>
+</node>
+
+<node label="Proposition">
+   <type name="ALTL/Proposition"/>
+</node>
+
+<node visible="no" label="Boundary">
+   <type name="ALTL/Boundary"/>
+</node>
+
+<node visible="no" label="Interval">
+   <type name="ALTL/Interval"/>
+</node>
+
+<node visible="yes" shape="Circle">
+   <type name="Participant"/>
+</node>
+
+<node visible="yes" showlabel="no" color="White" label="Ongoing">
+   <set name="ALTL/Ongoing" type="ALTL/Interval"/>
+</node>
+
+<edge attribute="no">
+   <relation name="sender"> <type name="Message"/> <type name="Participant"/> </relation>
+</edge>
+
+<edge color="Blue" attribute="no">
+   <relation name="receiver"> <type name="Message"/> <type name="Participant"/> </relation>
+</edge>
+
+</view>
+
+</alloy>
