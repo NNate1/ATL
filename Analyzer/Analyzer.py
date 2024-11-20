@@ -20,6 +20,8 @@ from Operations import (
     Store,
 )
 
+from Evaluator import evaluate
+
 FILENAME = "C:\\Users\\nunop\\Documents\\MEIC\\Tese\\ATL\\DHTsATL.als"
 UNUSED_TAG = -1
 # NO_REPLIER = "NoReplier"
@@ -348,7 +350,7 @@ def read_log(log: TextIOWrapper):
     line_count = 0
 
     for line in log:
-        if line_count == 500:
+        if line_count == 250:
             break
         line_count += 1
 
@@ -582,17 +584,6 @@ def complete_trace(
     root.append(instance)
 
 
-def eval(filename: Path):
-    XMLNode xmlNode = new XMLNode(new File(outputfilename));
-    String alloySourceFilename = xmlNode.iterator().next().getAttribute("filename");
-    Module ansWorld = CompUtil.parseEverything_fromFile(rep, null, alloySourceFilename);
-    A4Solution ans = A4SolutionReader.read(ansWorld.getAllReachableSigs(), xmlNode);
-
-    Expr e = CompUtil.parseOneExpression_fromString(ansWorld, "univ");
-    System.out.println(ans.eval(e));
-    e = CompUtil.parseOneExpression_fromString(ansWorld, "Point");
-    System.out.println(ans.eval(e));
-
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("usage: python Visualizer.py <log_path>")
@@ -628,5 +619,8 @@ if __name__ == "__main__":
     logging.info(f"Writing to {log_folder / p.name}")
     tree.write(log_folder / p.name)
 
-
-    eval(log_folder / p.name)
+    class_path = Path(
+        "/mnt/c/Users/nunop/Documents/MEIC/Tese/_org.alloytools.alloy.dist.jar"
+    )
+    source_path = Path("/mnt/c/Users/nunop/Documents/MEIC/Tese/ATL/DHTsATL.als")
+    evaluate(log_folder / p.name, class_path, source_path)
