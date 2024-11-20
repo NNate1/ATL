@@ -210,9 +210,16 @@ pred Intersects[i1 : Interval, i2 : Interval] {
 
 
 pred Initiates[i1 : Interval, i2 : Interval] {
-	Equal[i1, i2] or In[i2, i1] or Overlap[i2, i1]
+	Equal[i1, i2] or In[i2, i1] or Overlap[i1, i2] 
+	or Starts[i1, i2] or Starts[i2, i1]
 }
 
+pred Complement[I1 : set Interval, I2 : set Interval] {
+	always {
+		(no i1: I1 | Ongoing[i1]) iff
+			(some i2: I2| Ongoing[i2])
+	}
+}
 
 /*
  *  Inverted predicates
@@ -1026,6 +1033,12 @@ check Holds_Transitivity {
 		Holds[p, i1] and In[i2, i1] implies Holds[p, i2]
 } for exactly 2 Interval, 4 Boundary, exactly 1 Proposition expect 0
 
+/* Custom checks */
+check NotPrecedes{
+	all i1, i2 : Interval {
+		(not Precedes[i1, i2]) iff (Precedes[i2, i1] or Intersects[i1, i2])
+	}
+}for 6	
 
 /* Runs */
 
