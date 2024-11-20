@@ -1,3 +1,4 @@
+import logging
 import sys
 import xml.etree.ElementTree as ET
 from copy import deepcopy
@@ -5,9 +6,9 @@ from io import TextIOWrapper
 from pathlib import Path
 from typing import OrderedDict, cast
 
-import logging
-
 from Operations import (
+    NO_NODE,
+    NO_VALUE,
     Fail,
     FindNode,
     FunctionalOperation,
@@ -15,24 +16,15 @@ from Operations import (
     Leave,
     Lookup,
     Operation,
-    # Reply,
+    Reply,
     Store,
-    NO_VALUE,
-    NO_NODE,
 )
-
 
 FILENAME = "C:\\Users\\nunop\\Documents\\MEIC\\Tese\\ATL\\DHTsATL.als"
 UNUSED_TAG = -1
 # NO_REPLIER = "NoReplier"
 # NO_VALUE = "NoValue"
 # NO_REPONSIBLE = "NoResponsible"
-
-max_trace = 10
-command = "Run for 10"
-
-trace_length = 2
-backloop = 1
 
 
 def create_root() -> ET.Element:
@@ -69,27 +61,6 @@ def add_tuple(field: ET.Element, label1: str, label2: str) -> ET.Element:
     return tpl
 
 
-def add_instance(root: ET.Element, trace_length: int, backloop: int):
-    instance = ET.SubElement(root, "instance")
-    instance.set("bitwidth", "4")
-    instance.set("maxseq", "4")
-    instance.set("mintrace", "1")
-    instance.set("maxtrace", "10")
-    # instance.set("command", command)
-    # instance.set("tracelength", str(trace_length))
-    # instance.set("backloop", str(backloop))
-
-    # Not required
-    # add_builtin(instance, "seq/Int", "0", "1")
-    # add_builtin(instance, "Int", "1", "2")
-    # add_builtin(instance, "String", "3", "2")
-
-    add_element(instance, "sig", "ATL/P", "7", "8")
-
-    prop = add_element(instance, "sig", "ATL/Proposition", "8", "2")
-    prop.set("abstract", "yes")
-
-
 def add_types(field, id1: str, id2: str = ""):
     if id2:
         types = ET.SubElement(field, "types")
@@ -107,20 +78,21 @@ def create_instance(
     operations: "dict[str, Operation]",
 ):
     instance = ET.Element("instance")
+
     instance.set("bitwidth", "4")
     instance.set("maxseq", "2")
     instance.set("mintrace", "1")
 
-    instance.set("maxtrace", "10")
+    # instance.set("maxtrace", "10")
+    instance.set("maxtrace", str(len(times) + 1))  # + 1 for backloop instance
     instance.set("command", "Run run$1 for 10")
-    trace_length = len(times)
-    # instance.set("maxtrace", str(trace_length))
-    # instance.set("tracelength", str(trace_length))
-    # instance.set("backloop", str(trace_length - 1))
 
     instance.set("filename", FILENAME)
-    instance.set("tracelength", "2")
-    instance.set("backloop", "1")
+    # instance.set("tracelength", "2")
+    instance.set("tracelength", str(len(times) + 1))
+    # instance.set("backloop", "1")
+
+    instance.set("backloop", str(len(times)))
 
     # Not required
     # add_builtin(instance, "seq/Int", "0", "1")
@@ -399,6 +371,7 @@ def read_log(log: TextIOWrapper):
             args = components[4:] if len(components) > 4 else []
 
             op_counts[optype] = op_counts.get(optype, 0) + 1
+            op = None
 
             match optype:
                 case "Store":
@@ -431,7 +404,8 @@ def read_log(log: TextIOWrapper):
                     )
 
             nodes.add(node)
-            operations[id] = op
+            if op is not None:
+                operations[id] = op
 
         elif optype.startswith("Reply"):
             id = components[2]
@@ -439,33 +413,36 @@ def read_log(log: TextIOWrapper):
             args = components[4:] if len(components) > 4 else []
             reply_optype = optype.replace("Reply", "")
 
-            # op = Reply(time, optype, id, UNUSED_TAG, replier, args)
+            assert (
+                reply_optype in ("Join", "Fail", "Leave") or replier is not None
+            ), f"Missing replier of functional operation {line}"
+
+            reply = Reply(time, optype, id, UNUSED_TAG, replier)
             if id in operations:
                 op = operations[id]
                 op.set_end_time(time)
 
-                operations["Reply-" + id] = op
+                operations["Reply-" + id] = reply
 
-                if isinstance(reply_optype, FunctionalOperation):
+                if isinstance(op, FunctionalOperation):
                     op.set_replier(replier)
 
                 if len(args) > 0:
-                    match reply_optype:
-                        case "Lookup":
-                            op.set_value(args[0])
-                        case "FindNode":
-                            op.set_responsible(args[0])
+                    if isinstance(op, Lookup):
+                        op.set_value(args[0])
+                # case "FindNode":
+                #     op.set_responsible(args[0])
                 else:
                     logging.warning(
                         f"Reply for operation {id} missing result.\n Reply: {line}"
                     )
+
+                op_counts[optype] = op_counts.get(optype, 0) + 1
+
             else:
                 logging.warning(
                     f"Reply for operation {id} received before operation started.\n Reply: {line}"
                 )
-
-            # operations["Reply-" + id] = op
-            # operations["Reply-" + id] = operations[id]
 
             if reply_optype == "Lookup":
                 if len(args) == 0:
@@ -494,11 +471,14 @@ def read_log(log: TextIOWrapper):
             logging.warning(f"Unknown operation type at line {line_count}: {line}")
 
     # logging.debug(operations)
-    # logging.debug(f" {times = }")
+    logging.debug(f" times = {sorted(times)}")
     logging.debug(f" {nodes = }")
     logging.debug(f" {values = }")
     logging.debug(f" {keys = }")
-    logging.info(f"lines read: {line_count}, operations read: {op_counts}")
+    logging.info(f"lines read: {line_count}")
+    logging.info(f"operations types: {op_counts}")
+    logging.info(f"operations and replies recorded: {len(operations)}")
+    logging.info(f"timestamps recorded: {len(times)}")
 
     return nodes, keys, values, times, operations
 
@@ -520,8 +500,6 @@ def read_log(log: TextIOWrapper):
             if value := reply.get("value"):
                 values.add(str(value))
 
-    print(f"{keys = } {values = } {nodes = }\n{times = }\n{operations = }")
-
     # only model members that participate in the operations
     # members = members.intersection_update(nodes)
 
@@ -530,16 +508,90 @@ def read_log(log: TextIOWrapper):
     return instance
 
 
-# def eval():
-#     XMLNode xmlNode = new XMLNode(new File(outputfilename));
-#     String alloySourceFilename = xmlNode.iterator().next().getAttribute("filename");
-#     Module ansWorld = CompUtil.parseEverything_fromFile(rep, null, alloySourceFilename);
-#     A4Solution ans = A4SolutionReader.read(ansWorld.getAllReachableSigs(), xmlNode);
-#
-#     Expr e = CompUtil.parseOneExpression_fromString(ansWorld, "univ");
-#     System.out.println(ans.eval(e));
-#     e = CompUtil.parseOneExpression_fromString(ansWorld, "Point");
-#     System.out.println(ans.eval(e));
+def complete_trace(
+    root: ET.Element, instance_template: ET.Element, operations: dict[str, Operation]
+):
+    ongoing = set()
+    prev = None
+    instance = None
+
+    ongoing_sig = None
+    starting_sig = None
+    ending_sig = None
+
+    logging.info("Completing trace")
+    counter = 0
+    for id, op in operations.items():
+        counter += 1
+        if counter % 100 == 0:
+            logging.info(f"Generating operation {counter}/{len(operations)}")
+
+        logging.debug(f"Operation {op.get_name()} at {op.get_time()}")
+        logging.debug(f"Ongoing: {ongoing}")
+        if op.get_time() != prev:
+            if instance is not None:
+                root.append(instance)
+
+            logging.debug(f"New instance at {op.get_time()}")
+            instance = deepcopy(instance_template)
+
+            ongoing_sig = instance.find("sig[@label='ATL/Ongoing']")
+            starting_sig = instance.find("sig[@label='ATL/Starting']")
+            ending_sig = instance.find("sig[@label='ATL/Ending']")
+
+            assert ongoing_sig is not None, "Ongoing sig not found"
+
+            for e in ongoing:
+                add_element(ongoing_sig, "atom", e.get_name())
+            prev = op.get_time()
+
+        else:
+            assert instance is not None, "Instance not created"
+
+        assert ongoing_sig is not None, "Ongoing sig not found"
+        assert starting_sig is not None, "Starting sig not found"
+        assert ending_sig is not None, "Ending sig not found"
+
+        if op.is_end():
+            add_element(ending_sig, "atom", operations[op.get_id()].get_name())
+            assert (
+                operations[op.get_id()] in ongoing
+            ), f"Operation {op.get_name()} not in ongoing"
+            ongoing.remove(operations[op.get_id()])
+        else:
+            add_element(starting_sig, "atom", op.get_name())
+            add_element(ongoing_sig, "atom", op.get_name())
+            assert op not in ongoing, f"Operation {op.get_name()} already in ongoing"
+            ongoing.add(op)
+
+    if instance is not None:
+        root.append(instance)
+
+    logging.info("Creating backloop instance")
+
+    instance = deepcopy(instance_template)
+
+    ongoing_sig = instance.find("sig[@label='ATL/Ongoing']")
+    starting_sig = instance.find("sig[@label='ATL/Starting']")
+    ending_sig = instance.find("sig[@label='ATL/Ending']")
+
+    assert ongoing_sig is not None, "Ongoing sig not found"
+
+    for e in ongoing:
+        add_element(ongoing_sig, "atom", e.get_name())
+    root.append(instance)
+
+
+def eval(filename: Path):
+    XMLNode xmlNode = new XMLNode(new File(outputfilename));
+    String alloySourceFilename = xmlNode.iterator().next().getAttribute("filename");
+    Module ansWorld = CompUtil.parseEverything_fromFile(rep, null, alloySourceFilename);
+    A4Solution ans = A4SolutionReader.read(ansWorld.getAllReachableSigs(), xmlNode);
+
+    Expr e = CompUtil.parseOneExpression_fromString(ansWorld, "univ");
+    System.out.println(ans.eval(e));
+    e = CompUtil.parseOneExpression_fromString(ansWorld, "Point");
+    System.out.println(ans.eval(e));
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -562,10 +614,8 @@ if __name__ == "__main__":
 
     instance = create_instance(nodes, keys, values, times, operations)
 
-    # instance_c = deepcopy(instance)
-
     root = create_root()
-    root.append(instance)
+    complete_trace(root, instance, operations)
 
     tree = ET.ElementTree(element=root)
     ET.indent(tree, space="\t", level=0)
@@ -574,4 +624,9 @@ if __name__ == "__main__":
 
     log_folder = Path("traces")
     log_folder.mkdir(exist_ok=True)
+
+    logging.info(f"Writing to {log_folder / p.name}")
     tree.write(log_folder / p.name)
+
+
+    eval(log_folder / p.name)

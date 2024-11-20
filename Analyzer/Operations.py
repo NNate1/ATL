@@ -1,0 +1,230 @@
+module = "Operations"
+
+NO_VALUE = "NO_VALUE"
+NO_RESPONSIBLE = "NO_RESPONSIBLE"
+NO_REPLIER = "NO_REPLIER"
+NO_NODE = "NO_NODE"
+
+
+class Operation:
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        end_time: str | None = None,
+    ):
+        self.time = time
+        self.optype = optype
+        self.id = id
+        self.node = node
+        self.end_time = end_time
+
+        self.tag = tag
+
+    def get_name(self):
+        return f"{self.optype}${self.tag}"
+
+    def get_type(self):
+        return self.optype
+
+    def get_time(self):
+        return self.time
+
+    def get_id(self):
+        return self.id
+
+    def get_node(self):
+        assert self.node is not None
+        return self.node
+
+    def set_end_time(self, end_time: str):
+        self.end_time = end_time
+
+    def get_end_time(self):
+        return self.end_time
+
+    def is_end(self) -> bool:
+        return False
+
+    def __str__(self):
+        return f"{self.time}, {self.optype}, id: {self.id}, node: {self.node}, end_time: {self.end_time}"
+
+    def __repr__(self):
+        return str(self)
+
+
+class Reply(Operation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str | None = None,
+    ):
+        super().__init__(time, optype, id, tag, node or NO_REPLIER)
+
+    def get_node(self):
+        assert self.node is not NO_REPLIER, "Missing reply node"
+        return self.node
+
+    def is_end(self) -> bool:
+        return True
+
+
+class FunctionalOperation(Operation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        key: str,
+        replier: str | None = None,
+        end_time: str | None = None,
+    ):
+        super().__init__(time, optype, id, tag, node, end_time)
+        self.key = key
+        self.replier = replier
+
+    def get_key(self):
+        return self.key
+
+    def get_replier(self):
+        if self.replier is None:
+            return NO_NODE
+        return self.replier
+
+    def set_replier(self, replier):
+        self.replier = replier
+
+    def __str__(self):
+        return f"{super().__str__()}, key: {self.key}, replier: {self.replier}"
+
+
+class Store(FunctionalOperation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        key: str,
+        value: str,
+        replier: str | None = None,
+        end_time: str | None = None,
+    ):
+        super().__init__(time, optype, id, tag, node, key, replier, end_time)
+        self.value = value
+
+    def set_value(self, value: str):
+        self.value = value
+
+    def get_value(self):
+        if self.value is None:
+            return NO_VALUE
+        return self.value
+
+    def str(self):
+        return f"{super().__str__()}, value: {self.value}"
+
+
+class Lookup(FunctionalOperation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        key: str,
+        value: str | None = None,
+        replier: str | None = None,
+        end_time: str | None = None,
+    ):
+        super().__init__(time, optype, id, tag, node, key, replier, end_time)
+        self.value = value
+
+    def set_value(self, value: str):
+        self.value = value
+
+    def get_value(self):
+        if self.value is None:
+            return NO_VALUE
+        return self.value
+
+    def __str__(self):
+        return f"{super().__str__()}, value: {self.value}"
+
+
+class FindNode(FunctionalOperation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        key: str,
+    ):
+        super().__init__(time, optype, id, tag, node, key)
+        self.responsible = None
+
+    def set_replier(self, replier: str):
+        super().set_replier(replier)
+        self.responsible = replier
+
+    def get_responsible(self):
+        if self.responsible is None:
+            return NO_NODE
+        return self.responsible
+
+    def set_responsible(self, responsible: str):
+        self.responsible = responsible
+
+    def __str__(self):
+        return f"{super().__str__()}, responsible: {self.responsible}"
+
+
+class Join(Operation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        end_time: str | None = None,
+    ):
+        super().__init__(time, optype, id, tag, node, end_time)
+
+
+class Leave(Operation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+        end_time: str | None = None,
+    ):
+        super().__init__(time, optype, id, tag, node, end_time)
+
+
+class Fail(Operation):
+    def __init__(
+        self,
+        time: str,
+        optype: str,
+        id: str,
+        tag: int,
+        node: str,
+    ):
+        super().__init__(time, optype, id, tag, node)
+        self.end_time = time
