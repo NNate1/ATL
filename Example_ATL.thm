@@ -14,40 +14,44 @@
    <type name="Message"/>
    <type name="String"/>
    <type name="univ"/>
-   <type name="ALTL/P"/>
-   <type name="ALTL/T"/>
+   <type name="ATL/P"/>
+   <type name="ATL/Proposition"/>
+   <type name="ATL/T"/>
    <type name="seq/Int"/>
-   <set name="ALTL/Active" type="ALTL/Proposition"/>
-   <set name="ALTL/Happens" type="ALTL/Boundary"/>
-   <set name="ALTL/Starting" type="ALTL/Interval"/>
+   <set name="ATL/Happens" type="ATL/Boundary"/>
+</node>
+
+<node color="Blue">
+   <set name="ATL/Active" type="ATL/Proposition"/>
 </node>
 
 <node color="Green">
-   <set name="$Starting" type="ALTL/Interval"/>
+   <set name="$Starting" type="ATL/Interval"/>
+   <set name="ATL/Starting" type="ATL/Interval"/>
 </node>
 
 <node color="Red">
-   <set name="ALTL/Ending" type="ALTL/Interval"/>
+   <set name="ATL/Ending" type="ATL/Interval"/>
 </node>
 
-<node label="Proposition">
-   <type name="ALTL/Proposition"/>
+<node showlabel="yes" color="Green">
+   <set name="$Leader" type="Participant"/>
 </node>
 
-<node visible="no" label="Boundary">
-   <type name="ALTL/Boundary"/>
+<node visible="no">
+   <type name="ATL/Boundary"/>
 </node>
 
-<node visible="no" label="Interval">
-   <type name="ALTL/Interval"/>
+<node visible="no" color="White">
+   <type name="ATL/Interval"/>
+</node>
+
+<node visible="yes">
+   <set name="ATL/Ongoing" type="ATL/Interval"/>
 </node>
 
 <node visible="yes" shape="Circle">
    <type name="Participant"/>
-</node>
-
-<node visible="yes" showlabel="no" color="White" label="Ongoing">
-   <set name="ALTL/Ongoing" type="ALTL/Interval"/>
 </node>
 
 <edge attribute="no">

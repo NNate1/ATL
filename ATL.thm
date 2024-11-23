@@ -10,38 +10,36 @@
 <node>
    <type name="Boundary"/>
    <type name="Int"/>
-   <type name="Interval"/>
    <type name="P"/>
    <type name="Proposition"/>
    <type name="String"/>
    <type name="T"/>
    <type name="seq/Int"/>
    <set name="this/Happens" type="Boundary"/>
-   <set name="this/Starting" type="Interval"/>
-   <set name="$During_Infinite_i1" type="Interval"/>
-   <set name="$During_Infinite_i2" type="Interval"/>
+</node>
+
+<node color="Red">
+   <set name="$Ending" type="Interval"/>
+</node>
+
+<node color="White">
+   <type name="Interval"/>
 </node>
 
 <node visible="no">
    <type name="univ"/>
-   <set name="this/Ending" type="Interval"/>
 </node>
 
-<node visible="no" style="inherit">
-   <set name="this/Ongoing" type="Interval"/>
-</node>
-
-<node visible="yes" color="Green" label="A_Starting">
-   <set name="$A_Starting" type="Interval"/>
-</node>
-
-<node visible="yes" color="Red" label="B_Ending">
-   <set name="$B_Ending" type="Interval"/>
-</node>
-
-<node visible="yes" color="White">
+<node visible="yes" color="Blue">
    <set name="this/Active" type="Proposition"/>
-   <set name="$C_Ongoing" type="Interval"/>
+</node>
+
+<node visible="yes" color="Green">
+   <set name="$Starting" type="Interval"/>
+</node>
+
+<node visible="yes" style="inherit">
+   <set name="this/Ongoing" type="Interval"/>
 </node>
 
 </view>

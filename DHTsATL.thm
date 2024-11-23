@@ -27,21 +27,9 @@
    <type name="ATL/Proposition"/>
    <type name="ATL/T"/>
    <type name="seq/Int"/>
-   <set name="$Key_Consistency_f1" type="FindNode"/>
-   <set name="$Key_Consistency_f2" type="FindNode"/>
-   <set name="$Key_Consistency_ideal" type="IdealState"/>
-   <set name="ATL/Active" type="ATL/Proposition"/>
-   <set name="ATL/Ending" type="ATL/Interval"/>
+   <set name="$ValueFreshness_ideal" type="IdealState"/>
+   <set name="$ValueFreshness_lookup" type="Lookup"/>
    <set name="ATL/Happens" type="ATL/Boundary"/>
-   <set name="ATL/Starting" type="ATL/Interval"/>
-</node>
-
-<node showlabel="no" color="Green">
-   <set name="$A_Starting" type="ATL/Interval"/>
-</node>
-
-<node showlabel="no" color="Red">
-   <set name="$B_Ending" type="ATL/Interval"/>
 </node>
 
 <node showlabel="no" color="Yellow">
@@ -51,7 +39,6 @@
 <node visible="no">
    <type name="Key"/>
    <type name="univ"/>
-   <set name="ATL/Ongoing" type="ATL/Interval"/>
 </node>
 
 <node visible="no" label="Ideal">
@@ -66,8 +53,24 @@
    <type name="StableRegimen"/>
 </node>
 
+<node visible="no" showlabel="no">
+   <set name="ATL/Ongoing" type="ATL/Interval"/>
+</node>
+
+<node visible="yes" color="Blue">
+   <set name="ATL/Active" type="ATL/Proposition"/>
+</node>
+
 <node visible="yes" shape="Circle" color="Red">
    <type name="Node"/>
+</node>
+
+<node visible="yes" showlabel="no" color="Green">
+   <set name="$A_Starting" type="ATL/Interval"/>
+</node>
+
+<node visible="yes" showlabel="no" color="Red">
+   <set name="$B_Ending" type="ATL/Interval"/>
 </node>
 
 <node visible="yes" showlabel="no" color="White">

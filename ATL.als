@@ -1,4 +1,4 @@
-module ALTLv2
+module ATL
 
 /*
  * Signatures: 
@@ -14,18 +14,6 @@ module ALTLv2
        - Ongoing 
  */ 
 
-// Visualization function to reorder theme priority
-fun A_Starting: Interval {
-	Starting
-}
-
-fun B_Ending : Interval {
-	Ending
-}
-
-fun C_Ongoing : Interval {
-	 Ongoing
-}
 
 /* Testing sigs */
 sig T extends Interval{}
@@ -45,27 +33,34 @@ abstract sig Interval {
 var sig Happens in Boundary {}
 
 var sig Ongoing in Interval {}
-var sig Starting, Ending in Ongoing{}
+--var sig Starting, Ending in Ongoing{}
 
+fun Starting : Interval{
+	start.Happens
+}
+
+fun Ending: Interval{
+	end.Happens
+}
 
 pred Ongoing[ i : Interval ] {
-	some i & Ongoing
+	i in Ongoing
 }
 
 pred Starting[ i : Interval ] {
-	some i & Starting
+	i in Starting
 }
 
 pred Ending[ i : Interval ] {
-	some i & Ending
+	i in Ending
 }
 
 pred Active[p : Proposition] {
-	some p & Active
+	p in Active
 }
 
 pred Happens[b : Boundary] {
-	some b & Happens
+	b in Happens
 }
 
 pred Finite[i : Interval] {
@@ -87,18 +82,24 @@ fact {
 	// the non-terminating currently ongoing intervals
 	always{
 		Ongoing' = Ongoing + Starting' - Ending
-		Starting = start.Happens
-		Ending = end.Happens
+		(Starting + Ending) in Ongoing
+--		Starting = start.Happens
+--		Ending = end.Happens
 	}
 
+	
 	// (1) Initial ongoing intervals are starting
-	all i: Interval | Ongoing[i] iff Starting[i]
+	--all i: Interval | Ongoing[i] iff Starting[i]	
+	Ongoing = Starting
+	
 
 	// (2) Intervals start if they were previously not ongoing
 	all i : Interval | always (i in Starting' implies no i & Ongoing)
-	
+
+
 	// (3) Intervals do not repeat
 	all i : Interval | always (Ending[i] implies after always not Starting[i])
+ 
 
 }
 
@@ -106,8 +107,12 @@ fact {
 
 // Performance Improving Facts
 fact {
+	
 	// (4) All intervals start
-	all i : Interval | eventually Starting[i]
+	--all i : Interval | eventually Starting[i]
+
+	// (4) All boundaries happen
+	all b : Boundary | eventually Happens[b]
 
 	// (5) All boundaries belong to an interval
 	Boundary in Interval.(start+end)
@@ -1038,7 +1043,7 @@ check NotPrecedes{
 	all i1, i2 : Interval {
 		(not Precedes[i1, i2]) iff (Precedes[i2, i1] or Intersects[i1, i2])
 	}
-}for 6	
+}for 6 expect 0
 
 /* Runs */
 
@@ -1048,7 +1053,7 @@ run Simple_Ongoing{
 
 run Singleton{
 	some i : Interval | Singleton[i]
-} for 4
+} for 4 expect 1
 
 
 /* Intervals repeat
@@ -1065,13 +1070,13 @@ run Equal{
 	some i1, i2 : Interval {
 		Equal[i1, i2]
 	}
-} for 4
+} for 4 expect 1
 
 run Before{
 	some i1, i2 : Interval {
 		Before[i1, i2]
 	}
-} for 4
+} for 4 expect 1
 
 run Meets{
 	some i1, i2 : Interval {
@@ -1083,37 +1088,37 @@ run Overlap{
 	some i1, i2 : Interval {
 		Overlap[i1, i2]
 	}
-} for 4
+} for 4 expect 1
 
 run During{
 	some i1, i2 : Interval {
 		During[i1, i2]
 	}
-} for 4
+} for 4 expect 1
  
 run Starts{
 	some i1, i2 : Interval {
 		Starts[i1, i2]
 	}
-} for 4
+} for 4 expect 1
 
 run Finishes{
 	some i1, i2 : Interval {
 		Finishes[i1, i2]
 	}
-} for 4
+} for 4 expect 1
 
 run Holds{
 	some p : Proposition, i : Interval {
 		Holds[p, i]
 	}
-} for 4
+} for 4 expect 1
 
 run Occurs{
 	some p : Proposition, i : Interval {
 		Occurs[p, i]
 	}
-} for 4
+} for 4 expect 1
 
 run During_Infinite{
 	some i1, i2 : Interval{

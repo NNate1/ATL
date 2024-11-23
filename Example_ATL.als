@@ -1,4 +1,4 @@
-open ALTL
+open ATL
 
 // Ignore library test signatures
 fact {
@@ -6,13 +6,10 @@ fact {
 	no P
 }
 
-/*
- * Visualization functions
- */
 
-// Starting interval
+// Starting interval visualization priority
 fun Starting : Interval {
-	 ALTL/Starting
+	 ATL/Starting
 }
 
 
@@ -74,7 +71,7 @@ fact { all f : Fail | Singleton[f]}
 check NoSelfMessaging{
 	// Participants do not send messages to themselves
 	no (sender & receiver)
-} for 6
+} for 6 expect 0
 
 
 // Message rules
@@ -181,12 +178,12 @@ check NonLeader_Message{
 		implies
 		(no sender.p)
 	}
-} for 8 -- Ok
+} for 8 expect 0 -- Ok
 
 // Participants that are never leaders never send messages
 check Incorrect_NonLeader_Message{ 
 	no	(Message.sender & (Participant - Election.leader))
-} for 8 -- OK
+} for 8 expect 0 -- OK
 
 
 // Messages are received in the same order as they were sent
@@ -198,7 +195,7 @@ check Arrival_Order{
 		not Finite[m2])
 		
 	}
-} for 8 but 3 Message  -- OK
+} for 8 but 3 Message  expect 0-- OK
 
 
 // If a node fails then it cannot receive messages
@@ -206,7 +203,7 @@ check Failed_Receiver {
 	all m : Message, f : Fail{
 		(m.receiver = f.node and  Precedes[f, m]) implies not Finite[m]
 	}
-} for 8 -- OK
+} for 8 expect 0-- OK
 
 
 
@@ -217,7 +214,7 @@ check Message_During_Election{
 		Ongoing[e]
 		not Happens[e.end]
 	}
-}for 6 but 3 Message, 3 Election-- OK
+}for 6 but 3 Message, 3 Election expect 0-- OK
 
 // Messages sent requires a previous election
 check Message_Implies_Election{
@@ -226,7 +223,7 @@ check Message_Implies_Election{
 			m.sender = e.leader
 			Precedes[e, m]
 		}
-}for 6 but 3 Message, 3 Election-- OK
+}for 6 but 3 Message, 3 Election expect 0-- OK
 
 
 
@@ -235,36 +232,31 @@ check Message_Implies_Election{
  */
 run Simple_Message{
 	some Message
-} for 10 but exactly 2 Election
+} for 10 but exactly 2 Election expect 1
 
 run Fail {
 	some Fail
-} for 4
+} for 4 expect 1
 
 run Overlapping_Message{
 	some m1, m2 : Message {
 		Overlap[m1, m2]
 	}
-} for 8
+} for 8 expect 1
 
 run Overlapping_Message_Fail{
 	some m1, m2 : Message {
 		Overlap[m1, m2]
 		--Fail.node = m2.receiver
 	}
-} for 8 but 2 Participant, 2 Message, 1 Election, 1 Fail
-
-run Fail_TEST{
-	Fail.node = Participant
-	some Message
-} for 12 but 6 Interval,  exactly 2 Participant
+} for 8 but 2 Participant, 2 Message, 1 Election, 1 Fail expect 1
 
 run Fail_After_Sending{
 	some f : Fail, m : Message {
 		Precedes[m, f]
 		f.node = m.sender
 	}
-} for 8 but 2 Message, 1 Election, 2 Participant, 1 Fail
+} for 8 but 2 Message, 1 Election, 2 Participant, 1 Fail expect 1
 
 
 run Overlapping_Terminating_Message{
@@ -272,30 +264,30 @@ run Overlapping_Terminating_Message{
 		Overlap[m1, m2]
 		Finite[m2]
 	}
-} for 8 but exactly 2 Message, exactly 1 Election
+} for 8 but exactly 2 Message, exactly 1 Election expect 1
 
 run Multiple_Messages{
 	some disj m1, m2: Message {
 		m1.sender != m2.sender
 	}
 
-} for 10 but exactly 2 Election
+} for 10 but exactly 2 Election expect 1
 
 run Multiple_Leaders{
 	some el1, el2 : Election {
 		el1.leader != el2.leader
 	}
-} for 6
+} for 6 expect 1
 
 run Multiple_Elections_Single_Leader{
 	one p : Participant | all e : Election {
 		e.leader = p
 	}
-} for 6 but 2 Election
+} for 6 but 2 Election expect 1
 
 run Fail{
 	some p : Participant {
 		eventually some node.p.start & Happens
 		eventually some leader.p.start & Happens
 	}
-} for 4
+} for 4 expect 1

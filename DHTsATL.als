@@ -1,5 +1,9 @@
 open ATL
 
+--open util/ordering[Lookup] as lo
+--open util/ordering[Store] as so
+--open util/ordering[Value] as vo
+
 // Ignore library test signatures
 fact {
 	no T
@@ -23,7 +27,7 @@ fun B_Ending : Interval {
 }
 
 fun C_Ongoing_Visual : Interval {
-	 ATL/C_Ongoing - Member - Responsible
+	 ATL/Ongoing-ATL/Starting - ATL/Ending - Member - Responsible
 }
 
 // Visualize Responsible Nodes
@@ -130,7 +134,7 @@ sig Fail extends MembershipOperation{}
 
 
 fact {
-	all op : Join + Leave /* + Operatoin */ | not Singleton[op]
+	all op : Join + Leave | not Singleton[op]
 	all f : Fail | Singleton[f]
 }
 
@@ -138,19 +142,8 @@ fact {
 sig IdealState, ReadOnlyRegimen, StableRegimen extends Interval{}
 
 fact {
-
-	--	Complement[Store, ReadOnlyRegimen]
-	always {
-		(no store : Store | Ongoing[store]) iff
-			(some readOnly : ReadOnlyRegimen | Ongoing[readOnly])
-	}
-
-	always {
-		(no op : Fail + Join + Leave | Ongoing[op]) iff
-			(some stable : StableRegimen | Ongoing[stable])
-	}
-
-
+	Complement[Store, ReadOnlyRegimen]
+	Complement[MembershipOperation, StableRegimen]
 }
 
 // States and regimens do not overlap
@@ -177,21 +170,39 @@ fact {
 	}
 
 	// Memberships are terminated by failing or leaving
-	all member : Member {
+/*	all member : Member {
 		Finite[member] iff 
 		(
 			(one fail : Fail {
+				Finite[fail]
 				fail.node = member.node
-				Finishes[fail, member]
+				Finishes[fail, member] or Equal[fail, member]
 			})
 			or
 			(one leave : Leave{
+				Finite[departure]
 				leave.node = member.node
 				Finishes[leave, member] or Equal[leave, member]
-				
 			})
 		)
+	}*/
+
+	// Memberships are terminated by failing or leaving
+	all departure : Leave + Fail {
+		Finite[departure] implies
+			one member : Member {
+				member.node = departure.node
+				(Finishes[departure, member] or Equal[departure, member])
+			}
 	}
+	all member : Member {
+		Finite[member] implies
+			one departure : Leave + Fail {
+				member.node = departure.node
+				(Finishes[departure, member] or Equal[departure, member])
+			}
+	}
+
 
 	// Nodes become members after joining
 	all join : Join {
@@ -200,7 +211,6 @@ fact {
 			Meets[join, member]
 		})
 	}
-
 	all member : Member {
 		not Initial[member] implies some join : Join {
 			member.node = join.node
@@ -209,6 +219,30 @@ fact {
 	}
 }
 
+/* Check Membership Operations trigger member intervals */
+check LeaveEndsMember{
+	always all l : Leave {
+		Ending[l] implies after( no m : Member{Ongoing[m] and m.node = l.node})
+	}
+} for 10 but exactly 1 Node, 1 Key,
+	10 Interval, 15 Boundary, 0 Operation,
+	0 Store, 0 Lookup, 0 Fail
+
+check FailEndsMember{
+	always all f : Fail{
+		Ending[f] implies after( no m : Member{Ongoing[m] and m.node = f.node})
+	}
+} for 10 but exactly 1 Node, 1 Key,
+	10 Interval, 15 Boundary, 0 Operation,
+	0 Store, 0 Lookup
+
+check JoinStartsMember{
+	always all j : Join{
+		Ending[j] implies after( some m : Member{Ongoing[m] and m.node = j.node})
+	}
+} for 10 but exactly 1 Node, 1 Key,
+	10 Interval, 15 Boundary, 0 Operation,
+	0 Store, 0 Lookup
 
 
 // Axiomatization of action preconditions 
@@ -289,7 +323,7 @@ fact {
 /*
  * Axioms
  */
-fact Axioms{
+pred Axioms{
 	KeyConsistency
 	LookupConsistency
 	ValueConsistency
@@ -299,15 +333,29 @@ fact Axioms{
 
 	Reachability
 	MembershipGuarantee 
-	ReplyMembershipGuarantee
-	
+		
 	FindNodeLookupConsistency 
 
-	ResponsabilityTransfer 
-//	ResponsabilityExpiration
+	ResponsibilityTransfer 
+	ResponsibilityExpiration
 
 	TerminationCompleteness
 }
+
+check Key_Consistency{ 
+	Axioms implies (no disj f1, f2 : FindNode, ideal : IdealState {
+		Finite[f1]
+		Finite[f2]
+		
+		In[f1, ideal] or Equal[f1, ideal]
+		In[f2, ideal] or Equal[f2, ideal]
+		
+		f1.key = f2.key
+		f1.responsible != f2.responsible
+	})
+} 
+for 8 but 16 Boundary, 2 Node, 3 Key, 2 FindNode, 1 IdealState
+
 
 /* P1 Key Consistency
  * In an Ideal state and Stable regimen, all members agree
@@ -373,11 +421,11 @@ pred ValueFreshness {
 		{ 
 			some ideal : IdealState {
 				Finite[lookup]
-				In[lookup, ideal] or Equal[lookup, ideal]		
+				In[lookup, ideal] or Equal[lookup, ideal]
 			}
 		}
 		implies some store : Store {
-			lookup.value = store.value 
+			lookup.value = store.value
 			lookup.key = store.key
 
 			// Concurrent
@@ -438,7 +486,6 @@ pred WeakValueFreshnessCondition {
  * then all findNode operations of the key that has 
  * the same value of the identifier of n must return n.
  */
-
 pred Reachability {
 	all findNode: FindNode, n : Node & findNode.key {
 		{
@@ -456,6 +503,8 @@ pred Reachability {
 /* P6 Membership Guarantee
  * FindNode operations must return a node that was a
  * member at one instant during the execution of the operation
+ * The replier of an operation must have been a member
+ * at one instant during the execution of the operation
  */
 pred MembershipGuarantee {
 	all find: FindNode, n : FindNode.responsible {
@@ -465,14 +514,7 @@ pred MembershipGuarantee {
 				Intersects[m, find]
 			}
 	}
-}
 
-
-/*
- * P* The replier of an operation must have been a member
- * at one instant during the execution of the operation
- */
-pred ReplyMembershipGuarantee {
 	all op: Operation {
 		Finite[op] implies
 			some m : Member {
@@ -481,6 +523,7 @@ pred ReplyMembershipGuarantee {
 			}
 	}
 }
+
 
 /* P7 FindNode Lookup Consistency
  * If the lookup of key k returns a value stored by node n,
@@ -493,14 +536,14 @@ pred FindNodeLookupConsistency {
 	all find: FindNode {
 		Finite[find] implies some r : Responsible {
 			r.node = find.responsible
-			r.key in find.key
+			find.key in r.key
 			Intersects[r, find]
 		}
 	}
 	all look: Lookup{
 		Finite[look] implies some r : Responsible {
 			r.node = look.replier
-			r.key in look.key
+			look.key in r.key
 			Intersects[r, look]
 		}
 	}
@@ -511,26 +554,25 @@ pred FindNodeLookupConsistency {
  * it eventually stops being responsible for any key
  */
 pred ResponsibilityExpiration {
-	
 	all fail : Fail {
 		(no join : Join {
 			join.node = fail.node	
 			Precedes[fail, join]
 		})
 		
-		implies all r : Responsible {
-			r.node = fail.node
-			Finite[r]
+		implies no r : Responsible {
+			fail.node = r.node 
+			not Finite[r]
 		}
 	}
 }
 
 
-/* P9 Responsability Transfer
+/* P9 Responsibility Transfer
  * When a node leaves the network
  * it immediately ceases to be responsible for any key
  */
-pred ResponsabilityTransfer{
+pred ResponsibilityTransfer{
 	all leave: Leave, n : Leave.node {
 		(no join : Join {
 			Precedes[leave, join]
@@ -559,30 +601,37 @@ pred TerminationCompleteness {
  */
 
 run Member {
+	Axioms
 	some Member
 } for 4 but 5 Interval
 
 run Store {
+	Axioms
 	some st : Store | Finite[st]
 } for 8 but 1 Operation, 5 Interval
 
 run Lookup{
+	Axioms
 	some l : Lookup | Finite[l]
 } for 8 but 2 Operation
 
 run FindNode{
+	Axioms
 	some find : FindNode| Finite[find]
 } for 8 but 1 Operation
 
 run Fail{
+	Axioms
 	some f : Fail | Finite[f]
-} for 4
+} for 6
 
 run Join{
+	Axioms
 	some j : Join | Finite[j]
 } for 6 but 4 Interval
 
 run Leave{
+	Axioms
 	some l : Leave{
 		Finite[l]
 		no m : Member | Equal[m, l]
@@ -590,19 +639,182 @@ run Leave{
 } for 6
 
 run Ideal {
+	Axioms
 	some IdealState
 } for 4
 
 run Stable {
+	Axioms
 	some StableRegimen
 } for 6
 
 run ReadOnly {
+	Axioms
 	some ReadOnlyRegimen
 } for 6
 
 
+/* Valid Scenarios */
+run AllNodesParticipate{
+	Axioms
+	Operation.node = Node
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+--} for 8 but exactly 3 Node, 2 Key, 2 Value expect 1
+
+run AllNodesParticipateFinite{
+	Axioms
+	Operation.node = Node
+	all op : Operation {
+		Finite[op]
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+--} for 8 but exactly 2 Node, 2 Key, 2 Value expect 1
+
+
+run AllNodesParticipateOrFail{
+	Axioms
+	(Operation.node + Fail.node) = Node
+	some Fail
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+--} for 8 but 3 Node, 2 Key, 2 Value expect 1
+
+run ConcurrentLookup{
+	Axioms
+	some disj look1, look2 : Lookup {
+		Intersects[look1, look2]
+		Finite[look1]
+		Finite[look2]
+		look1.key = look2.key
+		look1.value != look2.value
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*} for 4 but 18 Boundary, 10 Interval,
+		exactly 2 Lookup, exactly 2 Store
+		0 Fail, 0 MembershipOperation, 0 FindNode,
+		exactly 4 Key, exactly 2 Value, exactly 3 Node, exactly 3 Member,
+		exactly 1 IdealState, exactly 1 StableRegimen,
+		1 ReadOnlyRegimen,*/
+
+run ConcurrentLookupStable{
+	Axioms
+	some disj s1, s2: Store{
+		not	Initiates[s1, s2]
+	}
+	
+	some l : Lookup {
+		Ongoing[l]
+	}
+
+
+/*  Visualization order
+	lo/first.value = vo/first
+	so/first.value = vo/first
+	Initiates[lo/first, lo/last] or Precedes[lo/first, lo/last]
+	Initiates[so/first, so/last] or Precedes[so/first, so/last]
+*/
+	some disj look1, look2 : Lookup {
+		Intersects[look1, look2]
+		Finite[look1]
+		Finite[look2]
+		look1.key = look2.key
+		look1.key not in Node
+		look1.value != look2.value
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*} for 4 but 3 Boundary, 12 Interval,
+		exactly 2 Lookup, exactly 2 Store, exactly 3 Node, 5 Key, 2 Value,
+		0 Fail, 0 MembershipOperation, exactly 3 Member/*, 0 FindNode,
+		exactly 4 Key, exactly 2 Value, exactly 3 Node, exactly 3 Member,
+		exactly 1 IdealState, exactly 1 StableRegimen,
+		1 ReadOnlyRegimen,*/
+
+run AllOperations{
+	Axioms
+	some Lookup
+	some Store
+	some FindNode
+	some Join
+	some Leave
+	some Fail
+	
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*} for 3 but 1 Node, 1 Key, 1 Value, exactly 1 Lookup, exactly 1 Store,
+		exactly 1 FindNode, exactly 1 Join, exactly 1 Leave, exactly 1 Fail,
+		10 Interval, 8 Boundary*/
+
+run ConcurrentLookupStore {
+	Axioms
+	some lookup : Lookup, store : Store {
+		Finite[lookup]
+		Finite[store]
+		Intersects[lookup, store]
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*
+} for 0 but 2 Node, 1 Key, 2 Value, exactly 1 Lookup, exactly 1 Store, 
+	6 Interval, 10 Boundary
+*/
+
+run FindNode_After_Leave {
+	Axioms
+	some leave: Leave, find: FindNode {
+		leave.node = find.responsible
+		Finite[find]
+
+		(Precedes[leave,find] or
+		Overlap[leave, find] or 
+		During[leave, find] or
+		Starts[leave, find]
+		)
+
+		no join : Join {
+			join.node = leave.node
+		}
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*} for 10 but 2 Node, 2 Key, 0 Value, exactly 1 FindNode, 
+	exactly 1 MembershipOperation,
+	10 Interval, 15 Boundary,
+	0 Store, 0 Lookup*/
+
+run FindNode_After_Fail{
+	Axioms
+	ResponsibilityTransfer
+	some fail: Fail, find: FindNode {
+		fail.node = find.responsible
+		Finite[find]
+		Precedes[fail,find] or During[fail, find] or Starts[fail, find]
+		no join : Join {
+			join.node = fail.node
+		}
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*
+} for 10 but exactly 2 Node, 2 Key, 0 Value, exactly 1 FindNode, 
+	exactly 1 MembershipOperation,
+	10 Interval, 15 Boundary,
+	0 Store, 0 Lookup
+*/
+	
+run Find_Node_of_Departed_Node {
+	Axioms
+	some leave: Leave, find: FindNode {
+		leave.node = find.key
+		Finite[find]
+		Precedes[leave,find]
+		no join : Join {
+			join.node = leave.node
+		}
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*} for 10 but exactly 2 Node, 2 Key, 0 Value, exactly 1 FindNode, 
+	exactly 1 MembershipOperation,
+	10 Interval, 15 Boundary,
+	0 Store, 0 Lookup */
+
+
 run ConcurrentLookup {
+	Axioms
 	all	m : Member | Initial[m] and not Finite[m]
 	Initial[IdealState] and not Finite[IdealState]
 
@@ -622,18 +834,65 @@ run ConcurrentLookup {
 
 		look1.value != look2.value
 	}
-} for 18 Boundary, 
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+
+/*} for 18 Boundary, 
 		exactly 2 Lookup, exactly 2 Store,
 		0 Fail, 0 MembershipOperation, 0 FindNode,
 		exactly 4 Key, exactly 2 Value, exactly 3 Node, exactly 3 Member,
 		exactly 1 IdealState, exactly 1 StableRegimen,
 		1 ReadOnlyRegimen,
-		11 Interval, 0 Proposition
+		11 Interval, 0 Proposition*/
  
+/* Invalid Scenarios */
+run No_Member_Operations {
+	some Operation
+	no Member
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
+
+/* Derived Properties */
+
+check ValueFreshness_Implies_WeakValueFreshness{
+	--(Initial[IdealState] and not Finite[IdealState]
+	ValueFreshness implies not WeakValueFreshness
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
+/*} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
+			exactly 1 IdealState, 0 MembershipOperation expect 0*/
+
+
+check ValueFreshness_Implies_LookupConsistency{
+	(ValueFreshness and one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
+	})
+	implies LookupConsistency
+
+--(Initial[IdealState] and not Finite[IdealState]
+--	ValueFreshness implies LookupConsistency
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
+/*} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
+			exactly 1 IdealState, 0 MembershipOperation expect 0*/
+
+check Lookup_Consistency_Does_Not_Imply_ValueFreshness{
+	(LookupConsistency and one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
+	})
+	implies ValueFreshness
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+/*} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
+			exactly 1 IdealState, 0 MembershipOperation expect 0*/
+
+
+
+
 
 /* Axiom tests */
 // P1 Key Consistency
 run Key_Consistency{
+	Axioms
 	some disj f1, f2 : FindNode, ideal : IdealState{
 		In[f1, ideal]
 		In[f2, ideal]
@@ -641,9 +900,11 @@ run Key_Consistency{
 		Finite[f2]
 		f1.key = f2.key
 	}
-} for 8 but 2 FindNode, 1 IdealState
+} for 8 but 2 FindNode, 1 IdealState expect 1
+
 
 check Key_Consistency{ 
+	Axioms
 	no disj f1, f2 : FindNode, ideal : IdealState {
 		Finite[f1]
 		Finite[f2]
@@ -654,17 +915,20 @@ check Key_Consistency{
 		f1.key = f2.key
 		f1.responsible != f2.responsible
 	}
-} for 8 but 2 Node, 3 Key, 2 FindNode, 1 IdealState
-
+} 
+for 8 but 16 Boundary, 2 Node, 3 Key, 2 FindNode, 1 IdealState
+	
 // P2 Lookup Consistency
 check LookupConsistency {
-	(some lookup : Lookup | Finite[lookup])
+	
+	(Axioms and (some lookup : Lookup | Finite[lookup]))
 	implies
 		some Store
 } for 8 but 6 Interval, 12 Boundary
 
 // P3 Value Consistency
 run Value_Consistency{
+	Axioms
 	some disj lookup1, lookup2 : Lookup, readOnly : ReadOnlyRegimen {
 		lookup1.key = lookup2.key
 		In[lookup1, readOnly] or Equal[lookup1, readOnly]
@@ -676,30 +940,33 @@ run Value_Consistency{
 
 // P4 Value Freshness
 run Value_Freshness{
+	Axioms
 	some look : Lookup, ideal : IdealState | In[look, ideal]
 } for 8 but 3 Operation, exactly 2 Store, exactly 1 Lookup
 
 run Weak_Value_Freshness{
+	Axioms
 	WeakValueFreshnessCondition
 	some Lookup
 	 
 } for 8 but 3 Operation, exactly 2 Store, exactly 1 Lookup
 
-// Comment LookupConsistency for check
+
 check ValueFreshness_Implies_LookupConsistency{
 	(Initial[IdealState] and not Finite[IdealState]
 	and ValueFreshness) implies LookupConsistency
 } for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
-			exactly 1 IdealState, 0 MembershipOperation
+			exactly 1 IdealState, 0 MembershipOperation expect 0
 
-// Comment LookupConsistency for WeakValueFreshness for check
+
 check ValueFreshness_Implies_WeakValueFreshness{
 	ValueFreshness implies WeakValueFreshness
 } for 8 but 2 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
-		0 MembershipOperation
+		0 MembershipOperation expect 0
 
 // P5 Reachability
 run Reachability{
+	Axioms
 	some findNode : FindNode, ideal : IdealState, member : Member{
 		Finite[findNode]
 		findNode.key in Node
@@ -710,10 +977,10 @@ run Reachability{
 		In[ideal, member] or Equal[ideal, member]
 	}
 } for 8 but 1 Operation, 2 Key, 2 Node, 
-		exactly 1 FindNode, exactly 1 IdealState, 0 MembershipOperation 
+		exactly 1 FindNode, exactly 1 IdealState, 0 MembershipOperation expect 1
 
 check Reachability{
-	all findNode : FindNode, ideal : IdealState {
+	Axioms implies all findNode : FindNode, ideal : IdealState {
 		{
 		findNode.key in Node
 		In[findNode, ideal] or Equal[findNode, ideal]
@@ -726,14 +993,15 @@ check Reachability{
 				In[ideal, member] or Equal[member, ideal]
 			}
 	}
-} for 8 but 1 Operation, 2 Key, 2 Node , exactly 1 FindNode, exactly 1 IdealState
+} for 8 but 1 Operation, 2 Key, 2 Node , exactly 1 FindNode, exactly 1 IdealState expect 0
 
 // P6 Membership Guarantee
 
 // The responsible node obtained in a findNode operation
 // was never a member only if the find node operation does not terminate
 check Membership_Guarantee{
-	all find : FindNode, member : Member{
+
+		Axioms implies all find : FindNode, member : Member{
 		{
 			member.node = find.responsible
 
@@ -750,13 +1018,14 @@ check Membership_Guarantee{
 
 // P10 Termination Completeness
 run TerminationCompleteness {
+	Axioms
 	some op: Operation, stable : StableRegimen {
 		not Finite[stable] and In[op, stable]
 	}
 } for 6
 
 check TerminationCompleteness {
-	all op: Operation, stable : StableRegimen {
+	Axioms implies all op: Operation, stable : StableRegimen {
 		(not Finite[op] and In[op, stable]) implies
 			Finite[stable]
 	}
