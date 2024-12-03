@@ -75,6 +75,8 @@ pred Initial[i : Interval] {
 	Starting[i]
 }
 
+
+
 // Auxiliary Predicate Encoding	
 fact { 
 
@@ -90,17 +92,15 @@ fact {
 	
 	// (1) Initial ongoing intervals are starting
 	--all i: Interval | Ongoing[i] iff Starting[i]	
-	Ongoing = Starting
+--	Ongoing = Starting
 	
 
 	// (2) Intervals start if they were previously not ongoing
-	all i : Interval | always (i in Starting' implies no i & Ongoing)
+	all i : Interval | always (i in Starting' implies i not in Ongoing)
 
 
 	// (3) Intervals do not repeat
 	all i : Interval | always (Ending[i] implies after always not Starting[i])
- 
-
 }
 
 
@@ -216,7 +216,13 @@ pred Intersects[i1 : Interval, i2 : Interval] {
 
 pred Initiates[i1 : Interval, i2 : Interval] {
 	Equal[i1, i2] or In[i2, i1] or Overlap[i1, i2] 
-	or Starts[i1, i2] or Starts[i2, i1]
+	or Starts[i1, i2]
+}
+
+pred Requires[i1 : Interval, i2 : Interval] {
+--	Initiates[i2, i1]
+	Equal[i1, i2] or In[i1, i2] or Overlap[i2, i1] 
+	or Starts[i2, i1]
 }
 
 pred Complement[I1 : set Interval, I2 : set Interval] {

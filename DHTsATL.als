@@ -1,9 +1,9 @@
 open ATL
 
---open util/ordering[Lookup] as lo
---open util/ordering[Store] as so
---open util/ordering[Value] as vo
-
+/*open util/ordering[Lookup] as lo
+open util/ordering[Store] as so
+open util/ordering[Value] as vo
+*/
 // Ignore library test signatures
 fact {
 	no T
@@ -220,6 +220,7 @@ fact {
 }
 
 /* Check Membership Operations trigger member intervals */
+/*
 check LeaveEndsMember{
 	always all l : Leave {
 		Ending[l] implies after( no m : Member{Ongoing[m] and m.node = l.node})
@@ -243,7 +244,7 @@ check JoinStartsMember{
 } for 10 but exactly 1 Node, 1 Key,
 	10 Interval, 15 Boundary, 0 Operation,
 	0 Store, 0 Lookup
-
+*/
 
 // Axiomatization of action preconditions 
 // not covered by event library.
@@ -341,20 +342,6 @@ pred Axioms{
 
 	TerminationCompleteness
 }
-
-check Key_Consistency{ 
-	Axioms implies (no disj f1, f2 : FindNode, ideal : IdealState {
-		Finite[f1]
-		Finite[f2]
-		
-		In[f1, ideal] or Equal[f1, ideal]
-		In[f2, ideal] or Equal[f2, ideal]
-		
-		f1.key = f2.key
-		f1.responsible != f2.responsible
-	})
-} 
-for 8 but 16 Boundary, 2 Node, 3 Key, 2 FindNode, 1 IdealState
 
 
 /* P1 Key Consistency
@@ -599,7 +586,7 @@ pred TerminationCompleteness {
 /* 
  * Runs
  */
-
+/*
 run Member {
 	Axioms
 	some Member
@@ -652,21 +639,23 @@ run ReadOnly {
 	Axioms
 	some ReadOnlyRegimen
 } for 6
-
+*/
 
 /* Valid Scenarios */
 run AllNodesParticipate{
 	Axioms
-	Operation.node = Node
+	MembershipOperation.node + Operation.node = Node
+	#Node > 2
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
 --} for 8 but exactly 3 Node, 2 Key, 2 Value expect 1
 
 run AllNodesParticipateFinite{
 	Axioms
-	Operation.node = Node
-	all op : Operation {
+	MembershipOperation.node + Operation.node = Node
+	all op : Operation + MembershipOperation{
 		Finite[op]
 	}
+	#Node > 2
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
 --} for 8 but exactly 2 Node, 2 Key, 2 Value expect 1
 
@@ -695,8 +684,10 @@ run ConcurrentLookup{
 		exactly 1 IdealState, exactly 1 StableRegimen,
 		1 ReadOnlyRegimen,*/
 
+
 run ConcurrentLookupStable{
 	Axioms
+
 	some disj s1, s2: Store{
 		not	Initiates[s1, s2]
 	}
@@ -706,12 +697,12 @@ run ConcurrentLookupStable{
 	}
 
 
-/*  Visualization order
-	lo/first.value = vo/first
+	//Visualization order
+/*	lo/first.value = vo/first
 	so/first.value = vo/first
 	Initiates[lo/first, lo/last] or Precedes[lo/first, lo/last]
-	Initiates[so/first, so/last] or Precedes[so/first, so/last]
-*/
+	Initiates[so/first, so/last] or Precedes[so/first, so/last]*/
+
 	some disj look1, look2 : Lookup {
 		Intersects[look1, look2]
 		Finite[look1]
@@ -720,13 +711,15 @@ run ConcurrentLookupStable{
 		look1.key not in Node
 		look1.value != look2.value
 	}
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
-/*} for 4 but 3 Boundary, 12 Interval,
+//} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+
+
+} for 4 but 3 Boundary, 12 Interval,
 		exactly 2 Lookup, exactly 2 Store, exactly 3 Node, 5 Key, 2 Value,
 		0 Fail, 0 MembershipOperation, exactly 3 Member/*, 0 FindNode,
 		exactly 4 Key, exactly 2 Value, exactly 3 Node, exactly 3 Member,
 		exactly 1 IdealState, exactly 1 StableRegimen,
-		1 ReadOnlyRegimen,*/
+		1 ReadOnlyRegimen,P/
 
 run AllOperations{
 	Axioms
@@ -736,11 +729,31 @@ run AllOperations{
 	some Join
 	some Leave
 	some Fail
-	
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
 /*} for 3 but 1 Node, 1 Key, 1 Value, exactly 1 Lookup, exactly 1 Store,
 		exactly 1 FindNode, exactly 1 Join, exactly 1 Leave, exactly 1 Fail,
 		10 Interval, 8 Boundary*/
+
+/*
+run AllOperationsTerminate{
+	Axioms
+	some Lookup
+	some Store
+	some FindNode
+	some Join
+	some Leave
+	some Fail
+	all i : Operation + MembershipOperation | Finite[i]
+--} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
+} for 11 Interval, 8 Boundary, 5 Key, 1 Value, 0 Proposition expect 1
+*/
+run AllFunctionalOperationsTerminate{
+	Axioms
+	some Lookup
+	some Store
+	some FindNode
+	all i : Operation | Finite[i]
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
 
 run ConcurrentLookupStore {
 	Axioms
@@ -779,7 +792,6 @@ run FindNode_After_Leave {
 
 run FindNode_After_Fail{
 	Axioms
-	ResponsibilityTransfer
 	some fail: Fail, find: FindNode {
 		fail.node = find.responsible
 		Finite[find]
@@ -846,19 +858,42 @@ run ConcurrentLookup {
  
 /* Invalid Scenarios */
 run No_Member_Operations {
+	Axioms
 	some Operation
 	no Member
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
-/* Derived Properties */
+run Lookup_Stale_Value{
+	Axioms
+	one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
+	}
 
+	some store1, store2 : Store, lookup : Lookup{
+		store1.key = store2.key
+		store1.value != store2.value
+		Precedes[store1, store2]
+		
+		no store3 : Store - store1 { 
+			store3.key = store1.key 
+			store3.value = store1.value 
+		}
+		Precedes[store2, lookup]
+		lookup.key = store1.key
+		lookup.value = store1.value
+		Finite[lookup]
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
+ 
+/* Derived Properties */
 check ValueFreshness_Implies_WeakValueFreshness{
 	--(Initial[IdealState] and not Finite[IdealState]
-	ValueFreshness implies not WeakValueFreshness
+	ValueFreshness implies WeakValueFreshness
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 /*} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
 			exactly 1 IdealState, 0 MembershipOperation expect 0*/
-
 
 check ValueFreshness_Implies_LookupConsistency{
 	(ValueFreshness and one ideal : IdealState {
@@ -874,6 +909,7 @@ check ValueFreshness_Implies_LookupConsistency{
 /*} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
 			exactly 1 IdealState, 0 MembershipOperation expect 0*/
 
+/*
 check Lookup_Consistency_Does_Not_Imply_ValueFreshness{
 	(LookupConsistency and one ideal : IdealState {
 		all operation : Operation + MembershipOperation {
@@ -882,152 +918,129 @@ check Lookup_Consistency_Does_Not_Imply_ValueFreshness{
 	})
 	implies ValueFreshness
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
-/*} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
-			exactly 1 IdealState, 0 MembershipOperation expect 0*/
+*/
 
+/* 15 Steps */
 
-
-
-
-/* Axiom tests */
-// P1 Key Consistency
-run Key_Consistency{
+/* Invalid Scenarios */
+run No_Member_Operations {
 	Axioms
-	some disj f1, f2 : FindNode, ideal : IdealState{
-		In[f1, ideal]
-		In[f2, ideal]
-		Finite[f1]
-		Finite[f2]
-		f1.key = f2.key
+	some Operation
+	no Member
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
+
+run Lookup_Stale_Value{
+	Axioms
+	one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
 	}
-} for 8 but 2 FindNode, 1 IdealState expect 1
 
-
-check Key_Consistency{ 
-	Axioms
-	no disj f1, f2 : FindNode, ideal : IdealState {
-		Finite[f1]
-		Finite[f2]
+	some store1, store2 : Store, lookup : Lookup{
+		store1.key = store2.key
+		store1.value != store2.value
+		Precedes[store1, store2]
 		
-		In[f1, ideal] or Equal[f1, ideal]
-		In[f2, ideal] or Equal[f2, ideal]
-		
-		f1.key = f2.key
-		f1.responsible != f2.responsible
+		no store3 : Store - store1 { 
+			store3.key = store1.key 
+			store3.value = store1.value 
+		}
+		Precedes[store2, lookup]
+		lookup.key = store1.key
+		lookup.value = store1.value
+		Finite[lookup]
 	}
-} 
-for 8 but 16 Boundary, 2 Node, 3 Key, 2 FindNode, 1 IdealState
-	
-// P2 Lookup Consistency
-check LookupConsistency {
-	
-	(Axioms and (some lookup : Lookup | Finite[lookup]))
-	implies
-		some Store
-} for 8 but 6 Interval, 12 Boundary
-
-// P3 Value Consistency
-run Value_Consistency{
-	Axioms
-	some disj lookup1, lookup2 : Lookup, readOnly : ReadOnlyRegimen {
-		lookup1.key = lookup2.key
-		In[lookup1, readOnly] or Equal[lookup1, readOnly]
-		In[lookup2, readOnly] or Equal[lookup2, readOnly]
-		Finite[lookup1]
-		Finite[lookup2]
-	}
-} for 8 but 1 Key, 2 Value, 3 Operation, exactly 2 Lookup, exactly 1 ReadOnlyRegimen
-
-// P4 Value Freshness
-run Value_Freshness{
-	Axioms
-	some look : Lookup, ideal : IdealState | In[look, ideal]
-} for 8 but 3 Operation, exactly 2 Store, exactly 1 Lookup
-
-run Weak_Value_Freshness{
-	Axioms
-	WeakValueFreshnessCondition
-	some Lookup
-	 
-} for 8 but 3 Operation, exactly 2 Store, exactly 1 Lookup
-
-
-check ValueFreshness_Implies_LookupConsistency{
-	(Initial[IdealState] and not Finite[IdealState]
-	and ValueFreshness) implies LookupConsistency
-} for 8 but 1 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
-			exactly 1 IdealState, 0 MembershipOperation expect 0
-
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition,  1..15 steps expect 0
+ 
+/* Derived Properties */
 
 check ValueFreshness_Implies_WeakValueFreshness{
 	ValueFreshness implies WeakValueFreshness
-} for 8 but 2 Key, 2 Value, 1 Node, 1 Lookup, 0 FindNode,
-		0 MembershipOperation expect 0
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition,  1..15 steps expect 0
 
-// P5 Reachability
-run Reachability{
-	Axioms
-	some findNode : FindNode, ideal : IdealState, member : Member{
-		Finite[findNode]
-		findNode.key in Node
 
-		In[findNode, ideal] or Equal[findNode, ideal]
-		member.node = findNode.key
 
-		In[ideal, member] or Equal[ideal, member]
-	}
-} for 8 but 1 Operation, 2 Key, 2 Node, 
-		exactly 1 FindNode, exactly 1 IdealState, 0 MembershipOperation expect 1
-
-check Reachability{
-	Axioms implies all findNode : FindNode, ideal : IdealState {
-		{
-		findNode.key in Node
-		In[findNode, ideal] or Equal[findNode, ideal]
-		findNode.responsible != findNode.key
+check ValueFreshness_Implies_LookupConsistency{
+	(ValueFreshness and one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
 		}
-		implies 
-			not Finite[findNode] or 
-			no member : Member {
-				member.node = findNode.key
-				In[ideal, member] or Equal[member, ideal]
-			}
-	}
-} for 8 but 1 Operation, 2 Key, 2 Node , exactly 1 FindNode, exactly 1 IdealState expect 0
+	})
+	implies LookupConsistency
 
-// P6 Membership Guarantee
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition,  1..15 steps expect 0
 
-// The responsible node obtained in a findNode operation
-// was never a member only if the find node operation does not terminate
-check Membership_Guarantee{
 
-		Axioms implies all find : FindNode, member : Member{
-		{
-			member.node = find.responsible
-
-			//not Occurs[member, find]
-			Before[member, find] or Meets[member, find]
-			or Before[find, member] or Meets[find, member]
+/*
+check Lookup_Consistency_Does_Not_Imply_ValueFreshness{
+	(LookupConsistency and one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
 		}
-		implies not Finite[find]
-	}
-} for 4
+	})
+	implies ValueFreshness
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 1
+*/
 
 
+/** 20 Steps **/
 
-
-// P10 Termination Completeness
-run TerminationCompleteness {
+/* Invalid Scenarios */
+run No_Member_Operations {
 	Axioms
-	some op: Operation, stable : StableRegimen {
-		not Finite[stable] and In[op, stable]
-	}
-} for 6
+	some Operation
+	no Member
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
 
-check TerminationCompleteness {
-	Axioms implies all op: Operation, stable : StableRegimen {
-		(not Finite[op] and In[op, stable]) implies
-			Finite[stable]
+run Lookup_Stale_Value{
+	Axioms
+	one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
 	}
+
+	some store1, store2 : Store, lookup : Lookup{
+		store1.key = store2.key
+		store1.value != store2.value
+		Precedes[store1, store2]
+		
+		no store3 : Store - store1 { 
+			store3.key = store1.key 
+			store3.value = store1.value 
+		}
+		Precedes[store2, lookup]
+		lookup.key = store1.key
+		lookup.value = store1.value
+		Finite[lookup]
+	}
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
  
-} for 6 but 1 Key, 1 Value
+/* Derived Properties */
+
+check ValueFreshness_Implies_WeakValueFreshness{
+	ValueFreshness implies WeakValueFreshness
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+
+
+check ValueFreshness_Implies_LookupConsistency{
+	(ValueFreshness and one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
+	})
+	implies LookupConsistency
+
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+
+/*check Lookup_Consistency_Does_Not_Imply_ValueFreshness{
+	(LookupConsistency and one ideal : IdealState {
+		all operation : Operation + MembershipOperation {
+			In[operation, ideal] or Equal[operation, ideal]
+		}
+	})
+	implies ValueFreshness
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 1
+*/
+

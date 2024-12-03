@@ -1,16 +1,11 @@
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
-import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Scanner;
-
 import edu.mit.csail.sdg.alloy4.A4Reporter;
 import edu.mit.csail.sdg.parser.CompUtil;
 import edu.mit.csail.sdg.translator.A4Options;
@@ -18,7 +13,9 @@ import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
 
 public class Checker {
 
-    public static void run(final String fileName, final int numChecks, final A4Options opt, final PrintWriter writer)
+    public static void run(final String fileName, final int numChecks, final List<String> chosenCommands,
+            final A4Options opt,
+            final PrintWriter writer)
             throws Exception {
         final A4Reporter rep = new A4Reporter();
         final var world = CompUtil.parseEverything_fromFile(rep, null, fileName);
@@ -32,7 +29,9 @@ public class Checker {
         println(writer, "Check, Average (ms)" + createCSVHeader(numChecks));
 
         for (final var cmd : commands) {
-
+            if (!chosenCommands.isEmpty() && !chosenCommands.contains(cmd.label)) {
+                continue;
+            }
             final List<Double> times = new ArrayList<>();
             for (int i = 0; i < numChecks; i++) {
                 final long startTime = System.nanoTime();
@@ -78,7 +77,9 @@ public class Checker {
     }
 
     private static void printHelp() {
-        System.out.println("usage: script_dht.py [-h] [-d OUTPUT_DIR] [-n N] -f F [F ...]");
+        System.out
+                .println(
+                        "usage: script_dht.py [-h] [-d OUTPUT_DIR] [-n NUM_RUNS] [-c SPECIFIC_COMMAND]  -f MODEL_FILE [MODEL_FILE ...]");
     }
 
     private static void println(PrintWriter writer, String content) {
@@ -95,6 +96,7 @@ public class Checker {
         int numChecks = 10;
         String outputDir = null;
         List<String> modelFiles = new ArrayList<>();
+        List<String> commands = new ArrayList<>();
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -105,10 +107,14 @@ public class Checker {
                     outputDir = args[++i];
                     break;
                 case "-f":
-                    for (i = i + 1; i < args.length && !args[i].equals("-n") && !args[i].equals("-d"); i++) {
+                    for (i = i + 1; i < args.length && !args[i].equals("-n") && !args[i].equals("-d")
+                            && !args[i].equals("-c"); i++) {
                         modelFiles.add(args[i]);
                     }
                     --i;
+                    break;
+                case "-c":
+                    commands.add(args[++i]);
                     break;
                 case "-h":
                     printHelp();
@@ -144,7 +150,7 @@ public class Checker {
         // Configure solvers
 
         final A4Options.SatSolver[] solvers = {
-                A4Options.SatSolver.MiniSatJNI,
+                // A4Options.SatSolver.MiniSatJNI,
                 A4Options.SatSolver.LingelingJNI,
                 A4Options.SatSolver.GlucoseJNI,
                 A4Options.SatSolver.SAT4J
@@ -178,11 +184,11 @@ public class Checker {
                     try (PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
                         System.out.printf("Processing %s with solver %s... Output: %s%n",
                                 baseName, solver, outputFile.getAbsolutePath());
-                        run(fileName, numChecks, opt, writer);
+                        run(fileName, numChecks, commands, opt, writer);
                     }
                 } else {
                     System.out.printf("\nChecking %s with solver %s", baseName, solver);
-                    run(fileName, numChecks, opt, null);
+                    run(fileName, numChecks, commands, opt, null);
 
                 }
             }
