@@ -1,24 +1,27 @@
 module ATL
 
 /*
+ * Alloy Library for Allen Temporal Logic
+ *
  * Signatures: 
-	  - Proposition
-      - Boundary
-      - Interval
-
- */
-
-/*
+ *	  - Proposition
+ *    - Boundary
+ *    - Interval
+ *
+ *
  * Variable Signatures:
-       - Happens 
-       - Ongoing 
+ *     - Happens 
+ *     - Ongoing 
+ * 
+ * Concrete Signatures for testing
+ * 		- T : Interval
+ * 		- P : Proposition
  */ 
 
 
-/* Testing sigs */
-sig T extends Interval{}
-sig P extends Proposition{}
-
+/* 
+ * Signatures
+ */
 
 abstract sig Proposition {}
 var sig Active in Proposition {}
@@ -33,7 +36,15 @@ abstract sig Interval {
 var sig Happens in Boundary {}
 
 var sig Ongoing in Interval {}
---var sig Starting, Ending in Ongoing{}
+
+
+sig T extends Interval{}
+sig P extends Proposition{}
+
+
+/* 
+ *  Ongoing Functions
+ */
 
 fun Starting : Interval{
 	start.Happens
@@ -42,6 +53,10 @@ fun Starting : Interval{
 fun Ending: Interval{
 	end.Happens
 }
+
+/*
+ * Auxiliary Predicates
+ */ 
 
 pred Ongoing[ i : Interval ] {
 	i in Ongoing
@@ -68,7 +83,7 @@ pred Finite[i : Interval] {
 }
 
 pred Singleton[i : Interval] {
-	eventually (Starting[i] and Ending[i])
+	i.start = i.end
 }
 
 pred Initial[i : Interval] {
@@ -76,8 +91,9 @@ pred Initial[i : Interval] {
 }
 
 
-
-// Auxiliary Predicate Encoding	
+/*
+ * Auxiliary Predicate Encoding	
+ */
 fact { 
 
 	// Ongoing intervals in the next state are those that start and
@@ -85,36 +101,24 @@ fact {
 	always{
 		Ongoing' = Ongoing + Starting' - Ending
 		(Starting + Ending) in Ongoing
---		Starting = start.Happens
---		Ending = end.Happens
 	}
 
-	
-	// (1) Initial ongoing intervals are starting
-	--all i: Interval | Ongoing[i] iff Starting[i]	
---	Ongoing = Starting
-	
-
-	// (2) Intervals start if they were previously not ongoing
+	// Intervals start only if they were previously not ongoing
 	all i : Interval | always (i in Starting' implies i not in Ongoing)
 
-
-	// (3) Intervals do not repeat
+	// Intervals do not repeat
 	all i : Interval | always (Ending[i] implies after always not Starting[i])
 }
 
 
 
-// Performance Improving Facts
+// Scope limiting facts
 fact {
-	
-	// (4) All intervals start
-	--all i : Interval | eventually Starting[i]
 
-	// (4) All boundaries happen
+	// All boundaries happen
 	all b : Boundary | eventually Happens[b]
 
-	// (5) All boundaries belong to an interval
+	// All boundaries belong to an interval
 	Boundary in Interval.(start+end)
 }
 
@@ -124,15 +128,13 @@ fact {
  * Interval predicates
  */
 
-// EQUAL(i1, i2): i1 and i2 are ongoing during the same instants.
+// EQUAL(i1, i2): Intervals i1 and i2 are ongoing during the same instants.
 pred Equal[i1 : Interval, i2 : Interval] {
 	always (Ongoing[i1] iff Ongoing[i2])
 }
 
 
-// BEFORE(i1, i2): time interval i1 is before interval i2,
-// and they do not overlap in any way
-
+// BEFORE(i1, i2): Interval i1 ends at least 2 instants before i2 starts
 let strong_release [p1, p2] = {eventually p1 and p1 releases p2}
 
 pred Before[i1 : Interval, i2 : Interval] {
@@ -140,100 +142,47 @@ pred Before[i1 : Interval, i2 : Interval] {
 	not eventually (Ending[i1] and after Starting[i2])
 }
 
-// MEETS(i1, i2): interval i1 is before interval i2, but there is no interval between them, 
-// i.e., i1 ends where i2 starts
+// MEETS(i1, i2): Interval i2 starts imediatelly after i1 ends
 pred Meets[i1 : Interval, i2 : Interval] {
 	eventually (Ending[i1] and after Starting[i2])
 }
 
 
-// OVERLAP(i1, i2): interval i1 starts before i2, and they overlap
+// OVERLAP(i1, i2): Interval i1 starts before i2, and they overlap
 pred Overlap[i1 : Interval, i2 : Interval] {
 	Ongoing[i1] releases not Ongoing[i2]
 	eventually (Ending[i1] and Ongoing[i2] and not Ending[i2])
 }
 
 
-// DURING(i1, i2): time interval i1 is fully contained within i2
+// DURING(i1, i2): Interval i1 is strictly contained within i2
 pred During[i1 : Interval, i2 : Interval] {
 	always {
 		Ongoing[i1] implies Ongoing[i2]		
 		Starting[i1] implies not Starting[i2]
 	}
 
-	// Infinite intervals are not contained in infinite intervals
+	// Only finite intervals can be contained
 	eventually (Ending[i1] and not Ending[i2])
 }
 
 
-// STARTS(i1,i2): time interval i1 shares the same beginning as i2, 
-// but ends before i2 ends
+// STARTS(i1, i2): Interval i1 starts simultaneously with i2 
+// and ends earlier than i2
 pred Starts[i1 : Interval, i2 : Interval] {
 	eventually (Starting[i1] and Starting[i2])
 	eventually (Ongoing[i2] and not Ongoing[i1])
 }
 
-// FINISHES(i1, i2): time interval i1 shares the same end as i2,
-// but begins after i2 begins
+// FINISHES(i1, i2): Interval i1 ends simultaneously with i2 
+// and starts later than i2
 pred Finishes[i1 : Interval, i2 : Interval] {
 	eventually (Ongoing[i2] and not Ongoing[i1])
 	always (Ending[i1] iff Ending[i2])
 }
 
-
 /*
- * Proposition predicates
- */
-pred Holds[p : Proposition, t : Interval]{
-	always (Ongoing[t] implies Active[p])
-}
-
-pred Occurs[p : Proposition, t : Interval] {
-	eventually (Ongoing[t] and Active[p])
-}
-
-
-/*
- * Additional predicates
- */
-pred In[i1 : Interval, i2 : Interval] {
-	During[i1, i2] or Starts[i1, i2] or Finishes[i1, i2]
-}
-
-
-pred Contains[i1 : Interval, i2 : Interval] {
-	DuringI[i1, i2] or StartsI[i1, i2] or FinishesI[i1, i2]
-}
-
-pred Precedes[i1 : Interval, i2 : Interval] {
-	Before[i1, i2] or Meets[i1, i2]
-}
-
-pred Intersects[i1 : Interval, i2 : Interval] {
-	Equal[i1,i2] or In[i1,i2] or In[i2,i1] or Overlap[i1, i2] or Overlap[i2,i1]
-}
-
-
-pred Initiates[i1 : Interval, i2 : Interval] {
-	Equal[i1, i2] or In[i2, i1] or Overlap[i1, i2] 
-	or Starts[i1, i2]
-}
-
-pred Requires[i1 : Interval, i2 : Interval] {
---	Initiates[i2, i1]
-	Equal[i1, i2] or In[i1, i2] or Overlap[i2, i1] 
-	or Starts[i2, i1]
-}
-
-pred Complement[I1 : set Interval, I2 : set Interval] {
-	always {
-		(no i1: I1 | Ongoing[i1]) iff
-			(some i2: I2| Ongoing[i2])
-	}
-}
-
-/*
- *  Inverted predicates
+ *  Inverted Interval Predicates
  */
 pred After[i1 : Interval, i2: Interval] { Before[i2, i1] }
 
@@ -247,7 +196,71 @@ pred StartsI[i1 : Interval, i2: Interval] { Starts[i2, i1] }
 
 pred FinishesI[i1 : Interval, i2: Interval] { Finishes[i2, i1] }
 
-/* Predicate Visualization Functions */
+/*
+ * Proposition predicates
+ */
+
+// HOLDS(p, i): Proposition p holds throughout interval i
+pred Holds[p : Proposition, t : Interval]{
+	always (Ongoing[t] implies Active[p])
+}
+
+// OCCURS(p, i): Proposition p holds at least once during interval i
+pred Occurs[p : Proposition, t : Interval] {
+	eventually (Ongoing[t] and Active[p])
+}
+
+
+/*
+ * Additional predicates
+ */
+
+// In(i1, i2): Interval i1 is contained in i2
+pred In[i1 : Interval, i2 : Interval] {
+	During[i1, i2] or Starts[i1, i2] or Finishes[i1, i2]
+}
+
+// Contains(i1, i2): Interval i1 contains i2
+pred Contains[i1 : Interval, i2 : Interval] {
+	In[i2, i1]
+}
+
+// Precedes(i1, i2): Interval i1 ends before i2 starts
+pred Precedes[i1 : Interval, i2 : Interval] {
+	Before[i1, i2] or Meets[i1, i2]
+}
+
+// Intersects(i1, i2): 
+//	Intervals i1 and i2 are ongoing during one common instant
+pred Intersects[i1 : Interval, i2 : Interval] {
+	Equal[i1,i2] or In[i1,i2] or 
+	In[i2,i1] or Overlap[i1, i2] or 
+	Overlap[i2,i1]
+}
+
+// Requires(i1, i2): Interval i2 starts while i1 is ongoing
+// 	i.e i1 requires i2 to be ongoing in order to start;
+pred Requires[i1 : Interval, i2 : Interval] {
+	Equal[i1, i2] or In[i1, i2] or 
+	Overlap[i2, i1] or Starts[i2, i1]
+}
+
+// Complement(I1, I2):
+//	In every instant either a subset of I_1 is ongoing, 
+//	or a subset of I_2 is ongoing, but never both. 
+pred Complement[I1 : set Interval, I2 : set Interval] {
+	always {
+		(no i1: I1 | Ongoing[i1]) iff
+			(some i2: I2| Ongoing[i2])
+	}
+}
+
+
+
+/*
+ * Interval Predicate Visualization Functions 
+ * Used to visualize them as relations
+ */
 private fun d : set Interval->Interval {{t1, t2 : Interval | During[t1, t2]}}
 private fun di : set  Interval->Interval {{t1, t2 : Interval | During[t2, t1]}}
 
@@ -270,14 +283,14 @@ private fun e : set  Interval->Interval {{t1, t2 : Interval | Equal[t1, t2]}}
 
 
 /*
- * Base Property Check
+ * Base Property Checks
  */
 check Intervals_Dont_Repeat {
 	all t : Interval | always {
 		Ongoing[t] implies
 			always (not Ongoing[t] implies (always not Ongoing[t]))
 	}
-} for 2 but 1 Interval expect 0
+} for 4 expect 0
 
 
 /* 
@@ -286,7 +299,7 @@ check Intervals_Dont_Repeat {
 
 let Exclusion [a, b] = not (a and b)
 
-// Two intervals have at most relation
+// Pairs of intervals have at most one relation
 check Exclusivity {
 	all i1, i2 : Interval {
 		Exclusion[Starts[i1, i2], During[i1, i2]]
@@ -320,7 +333,7 @@ check Exclusivity {
 } for exactly 2 Interval, 4 Boundary, 0 Proposition expect 0
 
 
-// Two intervals have at least one relation
+// Pairs of intervals have at least one relation
 check MinimumRelation{
 	all i1, i2 : Interval {
 		(
@@ -341,9 +354,11 @@ check MinimumRelation{
 	}
 } for exactly 2 Interval, 4 Boundary, 0 Proposition expect 0
 
+
 /*
- * Transitivity Properties
+ * Interval Predicate Transitivity Properties
  */
+
 // Before
 check T_Before {
 	all i1, i2, i3 : Interval {
@@ -456,8 +471,8 @@ check T_During {
 
 
 
-// Contains
-check T_Contains {
+// DuringI
+check T_DuringI{
 	all i1, i2, i3 : Interval {
 		(DuringI[i1, i2] and Before[i2, i3])
 		implies {
@@ -1034,44 +1049,31 @@ check T_Finished_By {
 	}
 } for exactly 3 Interval, 6 Boundary, 0 Proposition expect 0
 
+
 /*
  * Holds Transitivity
  */
-
-
 check Holds_Transitivity {
 	all p : Proposition, i1, i2 : Interval |
 		Holds[p, i1] and In[i2, i1] implies Holds[p, i2]
 } for exactly 2 Interval, 4 Boundary, exactly 1 Proposition expect 0
 
-/* Custom checks */
+
+/* 
+ * Auxiliary Custom checks 
+ */
 check NotPrecedes{
 	all i1, i2 : Interval {
 		(not Precedes[i1, i2]) iff (Precedes[i2, i1] or Intersects[i1, i2])
 	}
 }for 6 expect 0
 
-/* Runs */
 
-run Simple_Ongoing{
-	eventually some Ongoing
-} for 4 expect 1
+/*
+ *  Runs
+ */
 
-run Singleton{
-	some i : Interval | Singleton[i]
-} for 4 expect 1
-
-
-/* Intervals repeat
-   No instance should be found (expect 0) */
-run Repeating_Intervals{
-	some i : Interval{
-		eventually (Ongoing[i] and 
-			eventually (not Ongoing[i] and eventually Ongoing[i]))
-	}
-} for 6 but 1 Interval expect 0
-
-
+// Interval predicate runs
 run Equal{
 	some i1, i2 : Interval {
 		Equal[i1, i2]
@@ -1114,6 +1116,9 @@ run Finishes{
 	}
 } for 4 expect 1
 
+/*
+ Proposition Runs
+ */
 run Holds{
 	some p : Proposition, i : Interval {
 		Holds[p, i]
@@ -1126,9 +1131,32 @@ run Occurs{
 	}
 } for 4 expect 1
 
+/*
+ * Scenarios
+ */
+// Some interval becomes ongoing
+run Simple_Ongoing{
+	eventually some Ongoing
+} for 4 expect 1
+
+// A singleton interval exists
+run Singleton{
+	some i : Interval | Singleton[i]
+} for 4 expect 1
+
+// Intervals repeat:
+//	   No instance should be found (expect 0)
+run Repeating_Intervals{
+	some i : Interval{
+		eventually (Ongoing[i] and 
+			eventually (not Ongoing[i] and eventually Ongoing[i]))
+	}
+} for 6 but 1 Interval expect 0
+
+// Interval during infinite interval
 run During_Infinite{
 	some i1, i2 : Interval{
 		During[i1, i2]
 		not Finite[i2]
 	}
-} for 8 but 2 Interval
+} for 8 but 2 Interval expect 1
