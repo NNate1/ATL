@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (C) 2024 Nuno Policarpo
+
 open ATL
 
 /*
@@ -745,23 +748,23 @@ run S10_Find_Node_of_Departed_Node {
 
 
 /* 
- * Derived Assertions, 10 Steps
+ * Derived Assertions
  */
-run A1_No_Member_Operations {
-	Axioms
-	some FunctionalOperation
-	no Member
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
-run A2_Lookup_Stale_Value{
-	Axioms
+assert A1_No_Member_Operations {
+	(Axioms and some FunctionalOperation) implies some Member
+}
+
+
+assert A2_Lookup_Stale_Value{
+	(Axioms and
 	one ideal : IdealState {
 		all operation : FunctionalOperation + MembershipOperation {
 			In[operation, ideal] or Equal[operation, ideal]
 		}
-	}
-
-	some store1, store2 : Store, lookup : Lookup{
+	})
+	implies
+	no store1, store2 : Store, lookup : Lookup{
 		store1.key = store2.key
 		store1.value != store2.value
 		Precedes[store1, store2]
@@ -775,123 +778,60 @@ run A2_Lookup_Stale_Value{
 		lookup.value = store1.value
 		Finite[lookup]
 	}
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
- 
+}
 
-check A3_ValueFreshness_Implies_WeakValueFreshness{
+
+assert A3_ValueFreshness_Implies_WeakValueFreshness{
 	ValueFreshness implies WeakValueFreshness
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
+}
 
-
-check A4_ValueFreshness_Implies_LookupConsistency{
+assert A4_ValueFreshness_Implies_LookupConsistency{
 	(ValueFreshness and one ideal : IdealState {
 		all operation : FunctionalOperation + MembershipOperation {
 			In[operation, ideal] or Equal[operation, ideal]
 		}
 	})
 	implies LookupConsistency
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
-
-
-/* 
- * Derived Assertions, 15 Steps
- */
-
-run A1_No_Member_Operations_15_steps {
-	Axioms
-	some FunctionalOperation
-	no Member
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
-
-
-run A2_Lookup_Stale_Value_15_steps {
-	Axioms
-	one ideal : IdealState {
-		all operation : FunctionalOperation + MembershipOperation {
-			In[operation, ideal] or Equal[operation, ideal]
-		}
-	}
-
-	some store1, store2 : Store, lookup : Lookup{
-		store1.key = store2.key
-		store1.value != store2.value
-		Precedes[store1, store2]
-		
-		no store3 : Store - store1 { 
-			store3.key = store1.key 
-			store3.value = store1.value 
-		}
-		Precedes[store2, lookup]
-		lookup.key = store1.key
-		lookup.value = store1.value
-		Finite[lookup]
-	}
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition,  1..15 steps expect 0
+}
  
-
-check A3_ValueFreshness_Implies_WeakValueFreshness_15_steps {
-	ValueFreshness implies WeakValueFreshness
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition,  1..15 steps expect 0
+check A1_No_Member_Operations for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
 
-check A3_ValueFreshness_Implies_LookupConsistency_15_steps {
-	(ValueFreshness and one ideal : IdealState {
-		all operation : FunctionalOperation + MembershipOperation {
-			In[operation, ideal] or Equal[operation, ideal]
-		}
-	})
-	implies LookupConsistency
-
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition,  1..15 steps expect 0
+check A2_Lookup_Stale_Value for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
 
-/* 
- * Derived Assertions, 20 Steps
- */
-
-run A1_No_Member_Operations_20_steps {
-	Axioms
-	some FunctionalOperation
-	no Member
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
-
-run A2_Lookup_Stale_Value_20_steps {
-	Axioms
-	one ideal : IdealState {
-		all operation : FunctionalOperation + MembershipOperation {
-			In[operation, ideal] or Equal[operation, ideal]
-		}
-	}
-
-	some store1, store2 : Store, lookup : Lookup{
-		store1.key = store2.key
-		store1.value != store2.value
-		Precedes[store1, store2]
-		
-		no store3 : Store - store1 { 
-			store3.key = store1.key 
-			store3.value = store1.value 
-		}
-		Precedes[store2, lookup]
-		lookup.key = store1.key
-		lookup.value = store1.value
-		Finite[lookup]
-	}
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
- 
-
-check A3_ValueFreshness_Implies_WeakValueFreshness_20_steps {
-	ValueFreshness implies WeakValueFreshness
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+check A3_ValueFreshness_Implies_WeakValueFreshness for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
 
-check A3_ValueFreshness_Implies_LookupConsistency_20_steps {
-	(ValueFreshness and one ideal : IdealState {
-		all operation : FunctionalOperation + MembershipOperation {
-			In[operation, ideal] or Equal[operation, ideal]
-		}
-	})
-	implies LookupConsistency
+check A4_ValueFreshness_Implies_LookupConsistency for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
-} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+check A1_No_Member_Operations for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
 
+check A2_Lookup_Stale_Value for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
+
+check A3_ValueFreshness_Implies_WeakValueFreshness for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
+
+check A4_ValueFreshness_Implies_LookupConsistency for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
+
+check A1_No_Member_Operations for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+
+
+check A2_Lookup_Stale_Value for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+
+
+check A3_ValueFreshness_Implies_WeakValueFreshness for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+
+
+check A4_ValueFreshness_Implies_LookupConsistency for 
+	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0

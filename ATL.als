@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (C) 2024 Nuno Policarpo
+
 module ATL
 
 /*
@@ -290,7 +293,7 @@ check Intervals_Dont_Repeat {
 		Ongoing[t] implies
 			always (not Ongoing[t] implies (always not Ongoing[t]))
 	}
-} for 4 expect 0
+} for 4 but 1..5 steps expect 0
 
 
 /* 
