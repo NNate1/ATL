@@ -1,10 +1,10 @@
+import argparse
 import logging
-import sys
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
-from typing import OrderedDict, cast
+from typing import OrderedDict,  cast
 
 from Operations import (
     NO_NODE,
@@ -16,11 +16,23 @@ from Operations import (
     Leave,
     Lookup,
     Operation,
+    ReadOnly,
+    ReadOnlyEnd,
+    Stable,
+    StableEnd,
     Reply,
     Store,
+    Interval
 )
 
-from Evaluator import evaluate
+# from Evaluator import evaluate
+
+# TODO:
+# Update states and regimens
+# Update Members
+# Update responsible
+# Starting Ending -> funcões
+
 
 FILENAME = "C:\\Users\\nunop\\Documents\\MEIC\\Tese\\ATL\\DHTsATL.als"
 UNUSED_TAG = -1
@@ -72,12 +84,15 @@ def add_types(field, id1: str, id2: str = ""):
         ET.SubElement(field, "type", {"ID": id1})
 
 
+
 def create_instance(
     nodes: set[str],
     keys: set[str],
     values: set[str],
     times: set[str],
     operations: "dict[str, Operation]",
+    stable_regimens: "dict[str, Operation]",
+    readonly_regimens: "dict[str, Operation]",
 ):
     instance = ET.Element("instance")
 
@@ -187,9 +202,13 @@ def create_instance(
 
     # ReadOnly
     read_only_sig = add_element(instance, "sig", "this/ReadOnlyRegimen", "32", "11")
+    for read_only in readonly_regimens.values():
+        add_element(read_only_sig, "atom", read_only.get_name())
 
     # Stable
     stable_sig = add_element(instance, "sig", "this/StableRegimen", "33", "11")
+    for stable in stable_regimens.values():
+        add_element(stable_sig, "atom", stable.get_name())
 
     # Interval
     add_element(instance, "sig", "ATL/T", "34", "11")
@@ -229,7 +248,6 @@ def create_instance(
     # ET.SubElement(ongoing_sig, 'type', {"ID": "39"})
 
     for op in operations.values():
-        # match type(op)
         if isinstance(op, FunctionalOperation):
             add_tuple(operation_node, op.get_name(), op.get_node())
             add_tuple(operation_key, op.get_name(), op.get_key())
@@ -240,7 +258,7 @@ def create_instance(
                 add_tuple(interval_start, op.get_name(), end_time)
 
             match op.get_type():
-                case "Store":
+                case "Store" | "Remove":
                     op = cast(Store, op)
                     add_element(store_sig, "atom", op.get_name())
                     add_tuple(store_values, op.get_name(), op.get_value())
@@ -310,13 +328,6 @@ def id_node(node: str):
     return "Node$" + str(node)
 
 
-# TODO:
-# Update ongoing operations
-# Update states and regimens
-# Update Members
-# Update responsible
-
-
 # time, type, id, node, args...
 #
 # 2022-09-27 18:00:00.000, Lookup, <ID>, <node>, <key>
@@ -335,13 +346,12 @@ def id_node(node: str):
 # 2022-09-27 18:00:00.000, ReplyJoin, <ID>
 
 
-def read_log(log: TextIOWrapper):
+def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set[str], set[str], OrderedDict[str, Operation]]:
     nodes = set()
     keys = set()
     values = set()
+    values = {NO_VALUE}
 
-    # time_counter
-    # times = OrderedDict()
     times = set()
 
     operations = OrderedDict()
@@ -349,31 +359,29 @@ def read_log(log: TextIOWrapper):
 
     line_count = 0
 
+    ongoing = set()
+
     for line in log:
-        if line_count == 250:
+        if line_count == max_lines:
             break
         line_count += 1
 
-        # strip line, and split comma ", ". But if a line has "A,\n". then also remove that comma
+        components = list(map(lambda x: x.strip(","), line.strip().split(", ")))
 
-        components = line.strip().split(", ")
-        for c in components:
-            c.strip(",")
-            # if c.endswith(","):
-            #     components[-1] = c[:-1]
 
         logging.debug(f"line {line_count} {components}")
 
         time, optype = components[0:2]
         times.add(time)
 
-        if optype in {"Lookup", "Store", "FindNode", "Join", "Leave", "Fail"}:
+        if optype in {"Lookup", "Store", "FindNode", "Remove", "Join", "Leave", "Fail"}:
             id = components[2]
             node = components[3]
             args = components[4:] if len(components) > 4 else []
 
-            op_counts[optype] = op_counts.get(optype, 0) + 1
             op = None
+
+            op_counts[optype] = op_counts.get(optype, 0) + 1
 
             match optype:
                 case "Store":
@@ -383,6 +391,12 @@ def read_log(log: TextIOWrapper):
                     keys.add(args[0])
                     values.add(args[1])
 
+                case "Remove":
+                    op = Store(
+                        time, optype, id, op_counts[optype], node, args[0], NO_VALUE
+                    )
+                    keys.add(args[0])
+                    # values.add(NO_VALUE)
                 case "Lookup":
                     op = Lookup(time, optype, id, op_counts[optype], node, args[0])
                     keys.add(args[0])
@@ -408,6 +422,7 @@ def read_log(log: TextIOWrapper):
             nodes.add(node)
             if op is not None:
                 operations[id] = op
+                ongoing.add(op)
 
         elif optype.startswith("Reply"):
             id = components[2]
@@ -422,6 +437,7 @@ def read_log(log: TextIOWrapper):
             reply = Reply(time, optype, id, UNUSED_TAG, replier)
             if id in operations:
                 op = operations[id]
+                reply.tag = op.tag
                 op.set_end_time(time)
 
                 operations["Reply-" + id] = reply
@@ -432,9 +448,10 @@ def read_log(log: TextIOWrapper):
                 if len(args) > 0:
                     if isinstance(op, Lookup):
                         op.set_value(args[0])
-                # case "FindNode":
-                #     op.set_responsible(args[0])
-                else:
+                    elif isinstance(op, FindNode):
+                        op.set_responsible(args[0])
+
+                elif isinstance(op, FindNode):
                     logging.warning(
                         f"Reply for operation {id} missing result.\n Reply: {line}"
                     )
@@ -442,22 +459,23 @@ def read_log(log: TextIOWrapper):
                 op_counts[optype] = op_counts.get(optype, 0) + 1
 
             else:
-                logging.warning(
-                    f"Reply for operation {id} received before operation started.\n Reply: {line}"
-                )
 
+                logging.warning(f"""Reply for operation {id} received before operation started.\nline: {line_count} {line}""")
+                
             if reply_optype == "Lookup":
+
                 if len(args) == 0:
                     values.add(NO_VALUE)
                 else:
                     values.add(args[0])
+
             elif reply_optype == "FindNode":
                 nodes.add(args[0])
 
             assert reply_optype in ("Join", "Fail", "Leave") or (
                 replier is not None
             ), f"line {line_count} {line}\n{components = }"
-            # nodes.add(replier)
+
             if replier is not None:
                 assert reply_optype in (
                     "Store",
@@ -484,34 +502,14 @@ def read_log(log: TextIOWrapper):
 
     return nodes, keys, values, times, operations
 
-    for op in log.get("operations") or []:
-        nodes.add(str(op.get("node")))
-        times[op.get("time")] = len(times)
-
-        operations.append(op)
-
-        args = op.get("args")
-        keys.add(str(args.get("key")))
-        if value := args.get("value"):
-            values.add(str(value))
-
-        if reply := op.get("reply"):
-            nodes.add(str(reply.get("replier")))
-            times[reply.get("time")] = len(times)
-
-            if value := reply.get("value"):
-                values.add(str(value))
-
-    # only model members that participate in the operations
-    # members = members.intersection_update(nodes)
-
-    instance = create_instance(nodes, keys, values, times, operations)
-
-    return instance
 
 
 def complete_trace(
-    root: ET.Element, instance_template: ET.Element, operations: dict[str, Operation]
+    root: ET.Element, 
+    instance_template: ET.Element,
+    operations: dict[str, Operation],
+    stable: dict[str, Interval],
+    readonly: dict[str, Interval]
 ):
     ongoing = set()
     prev = None
@@ -522,19 +520,25 @@ def complete_trace(
     ending_sig = None
 
     logging.info("Completing trace")
-    counter = 0
-    for id, op in operations.items():
+
+    # add stable and readonly to operations
+    events = operations | stable | readonly
+
+
+    for (counter, (id, event)) in enumerate(sorted(events.items(), key=lambda x: x[1].get_time())):
+        
         counter += 1
         if counter % 100 == 0:
-            logging.info(f"Generating operation {counter}/{len(operations)}")
+            logging.info(f"Generating event {counter}/{len(events)}")
 
-        logging.debug(f"Operation {op.get_name()} at {op.get_time()}")
+        logging.debug(f"event {event.get_name()} at {event.get_time()}")
         logging.debug(f"Ongoing: {ongoing}")
-        if op.get_time() != prev:
+
+        if event.get_time() != prev:
             if instance is not None:
                 root.append(instance)
 
-            logging.debug(f"New instance at {op.get_time()}")
+            logging.debug(f"New instance at {event.get_time()}")
             instance = deepcopy(instance_template)
 
             ongoing_sig = instance.find("sig[@label='ATL/Ongoing']")
@@ -545,7 +549,7 @@ def complete_trace(
 
             for e in ongoing:
                 add_element(ongoing_sig, "atom", e.get_name())
-            prev = op.get_time()
+            prev = event.get_time()
 
         else:
             assert instance is not None, "Instance not created"
@@ -554,17 +558,18 @@ def complete_trace(
         assert starting_sig is not None, "Starting sig not found"
         assert ending_sig is not None, "Ending sig not found"
 
-        if op.is_end():
-            add_element(ending_sig, "atom", operations[op.get_id()].get_name())
+        if event.is_end():
+            add_element(ending_sig, "atom", events[event.get_id()].get_name())
             assert (
-                operations[op.get_id()] in ongoing
-            ), f"Operation {op.get_name()} not in ongoing"
-            ongoing.remove(operations[op.get_id()])
+                events[event.get_id()] in ongoing
+            ), f"event {event.get_name()} not in ongoing"
+            
+            ongoing.remove(events[event.get_id()])
         else:
-            add_element(starting_sig, "atom", op.get_name())
-            add_element(ongoing_sig, "atom", op.get_name())
-            assert op not in ongoing, f"Operation {op.get_name()} already in ongoing"
-            ongoing.add(op)
+            add_element(starting_sig, "atom", event.get_name())
+            add_element(ongoing_sig, "atom", event.get_name())
+            assert event not in ongoing, f"event {event.get_name()} already in ongoing"
+            ongoing.add(event)
 
     if instance is not None:
         root.append(instance)
@@ -584,43 +589,115 @@ def complete_trace(
     root.append(instance)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("usage: python Visualizer.py <log_path>")
-        exit()
-    if "-d" in sys.argv:
-        sys.argv.remove("-d")
-        log_level = logging.DEBUG
-    else:
-        log_level = logging.INFO
+def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict]:
+    stable_regimens = {}
+    membership_ops = set()
+    ongoing_stable = None
+
+    readonly_regimens = {}
+    write_ops = set()
+    ongoing_readonly = None
+
+    prev = "" 
+
+    for op in operations.values():
+        time = op.get_time()
+
+
+        logging.debug(f"Processing operation {op.get_name()} at {time}")
+
+        # Stable
+        if op.get_type() in ("Join" , "Leave", "Fail"):
+            membership_ops.add(op.get_id())
+            if ongoing_stable is not None:
+                ongoing_stable.set_end_time(prev)
+
+                end_stable = StableEnd(prev, ongoing_stable.get_id())
+                stable_regimens["End-" + end_stable.get_id()] = end_stable
+
+                ongoing_stable = None
+
+        if len(membership_ops) == 0 and ongoing_stable is None:
+            ongoing_stable = Stable(time, str(len(stable_regimens)))
+            stable_regimens[ongoing_stable.get_id()] = ongoing_stable
+
+        if op.get_type() in ("ReplyJoin" , "ReplyLeave", "Fail"):
+            membership_ops.remove(op.get_id())
+        # Readonly
+        if op.get_type() in ("Store", "Remove"):
+            write_ops.add(op.get_id())
+            if ongoing_readonly is not None:
+                ongoing_readonly.set_end_time(prev)
+
+                end_readonly = ReadOnlyEnd(prev, ongoing_readonly.get_id())
+                readonly_regimens["End-" + end_readonly.get_id()] = end_readonly
+
+                ongoing_readonly = None
+
+
+        if len(write_ops) == 0 and ongoing_readonly is None:
+            ongoing_readonly = ReadOnly(time, str(len(stable_regimens)))
+            readonly_regimens[ongoing_readonly.get_id()] = ongoing_readonly
+
+        if op.get_type() in ("ReplyStore" , "ReplyRemove"):
+                    write_ops.remove(op.get_id())
+
+
+
+        prev = time
+
+    return stable_regimens, readonly_regimens
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "logfile", type=Path, help="Path to the log file to process."
+    )
+    parser.add_argument(
+        "output", type=Path, help="Path to save the generated XML file."
+    )
+    parser.add_argument(
+        "--max-lines", type=int, default=float("inf"), help="Maximum number of lines to process."
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable verbose logging."
+    )
+
+    args = parser.parse_args()
 
     logging.basicConfig(
-        level=log_level,
-        format="%(levelname)s: %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s"
         # filename="debug.log",
         # filemode="a",
     )
-    with open(sys.argv[1]) as f:
-        nodes, keys, values, times, operations = read_log(f)
 
-    instance = create_instance(nodes, keys, values, times, operations)
+
+    with args.logfile.open("r", encoding="utf-8") as log:
+        nodes, keys, values, times, operations = read_log(log, max_lines=args.max_lines)
+
+
+    (stable, readonly) = detect_regimens(operations)
+
 
     root = create_root()
-    complete_trace(root, instance, operations)
+    instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly)
 
-    tree = ET.ElementTree(element=root)
-    ET.indent(tree, space="\t", level=0)
-    p = Path(sys.argv[1])
-    p = p.with_suffix(".xml")
 
-    log_folder = Path("traces")
-    log_folder.mkdir(exist_ok=True)
 
-    logging.info(f"Writing to {log_folder / p.name}")
-    tree.write(log_folder / p.name)
 
-    class_path = Path(
-        "/mnt/c/Users/nunop/Documents/MEIC/Tese/_org.alloytools.alloy.dist.jar"
-    )
-    source_path = Path("/mnt/c/Users/nunop/Documents/MEIC/Tese/ATL/DHTsATL.als")
-    evaluate(log_folder / p.name, class_path, source_path)
+    complete_trace(root, instance_template, operations, stable, readonly)
+
+    tree = ET.ElementTree(root)
+    tree.write(args.output, encoding="utf-8", xml_declaration=True)
+    logging.info(f"XML trace successfully written to {args.output}")
+
+    # class_path = Path(
+    #     "/mnt/c/Users/nunop/Documents/MEIC/Tese/_org.alloytools.alloy.dist.jar"
+    # )
+    # source_path = Path("/mnt/c/Users/nunop/Documents/MEIC/Tese/ATL/DHTsATL.als")
+    # evaluate(log_folder / p.name, class_path, source_path)
+
+
+if __name__ == "__main__":
+    main()

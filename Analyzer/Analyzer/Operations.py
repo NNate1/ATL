@@ -6,6 +6,67 @@ NO_REPLIER = "NO_REPLIER"
 NO_NODE = "NO_NODE"
 
 
+class Interval:
+    def __init__(self, start_time: str, id : str):
+        self.start_time = start_time
+        self.id = id
+
+    def set_end_time(self, end_time: str):
+        self.end_time = end_time
+    
+    def get_time(self):
+        return self.start_time
+
+    def get_id(self):
+        return self.id
+
+    def get_name(self):
+        raise NotImplementedError
+
+    def is_end(self) -> bool:
+        return False
+
+    def __str__(self):
+        end_time = getattr(self, "end_time", None)
+        return f"{self.get_name()}, {self.start_time} -> {end_time}"
+
+    def __repr__(self):
+        return str(self)
+
+class ReadOnly(Interval):
+    def __init__(self, time: str, id : str):
+        super().__init__(time, id)
+    def get_name(self):
+        return f"ReadOnly${self.id}"
+
+class ReadOnlyEnd(Interval):
+    def __init__(self, time: str, id : str):
+        super().__init__(time, id)
+
+    def get_name(self):
+        return f"ReadOnly${self.id}"
+
+    def is_end(self) -> bool:
+        return True
+
+class Stable(Interval):
+    def __init__(self, time: str, id : str):
+        super().__init__(time, id)
+
+    def get_name(self):
+        return f"Stable${self.id}"
+
+class StableEnd(Interval):
+    def __init__(self, time: str, id : str):
+        super().__init__(time, id)
+
+    def get_name(self):
+        return f"Stable${self.id}"
+
+    def is_end(self) -> bool:
+        return True
+
+
 class Operation:
     def __init__(
         self,
@@ -50,7 +111,7 @@ class Operation:
         return False
 
     def __str__(self):
-        return f"{self.time}, {self.optype}, id: {self.id}, node: {self.node}, end_time: {self.end_time}"
+        return f"{self.time}, {self.get_name()}, id: {self.id}, node: {self.node}, end_time: {self.end_time}"
 
     def __repr__(self):
         return str(self)
@@ -175,9 +236,9 @@ class FindNode(FunctionalOperation):
         super().__init__(time, optype, id, tag, node, key)
         self.responsible = None
 
-    def set_replier(self, replier: str):
-        super().set_replier(replier)
-        self.responsible = replier
+    # def set_replier(self, replier: str):
+    #     super().set_replier(replier)
+    #     self.responsible = replier
 
     def get_responsible(self):
         if self.responsible is None:
