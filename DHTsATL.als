@@ -25,7 +25,6 @@ open ATL
  * 	- Value Freshness
  *  - Reachability
  *  - Membership Guarantee
- *  - Reply Membership Guarantee
  *  - FindNode Lookup Consistency
  *  - Responsibility Expiration
  *  - Responsibility Transfer
@@ -523,10 +522,10 @@ pred ResponsibilityTransfer{
  * at one instant during the execution of the operation
  */
 pred MembershipGuarantee {
-	all find: FindNode, n : FindNode.responsible {
+	all find: FindNode {
 		Finite[find] implies
 			some m : Member {
-				m.node = n
+				m.node = find.responsible
 				Intersects[m, find]
 			}
 	}
@@ -575,12 +574,12 @@ pred TerminationCompleteness {
 /* 
  * Runs
  */
-/*
+
 run Member {
 	Axioms
 	some Member
 } for 4 but 5 Interval
-
+/*
 run Store {
 	Axioms
 	some st : Store | Finite[st]

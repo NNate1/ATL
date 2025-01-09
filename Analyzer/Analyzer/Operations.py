@@ -10,18 +10,23 @@ class Interval:
     def __init__(self, start_time: str, id : str):
         self.start_time = start_time
         self.id = id
+        self.end_time = None
+
+    def get_time(self):
+        return self.start_time
 
     def set_end_time(self, end_time: str):
         self.end_time = end_time
     
-    def get_time(self):
-        return self.start_time
+    def get_end_time(self):
+        return self.end_time
 
     def get_id(self):
-        return self.id
+        return self.get_name()
+        # return self.id
 
     def get_name(self):
-        raise NotImplementedError
+        return f"{type(self).__name__}${id}"
 
     def is_end(self) -> bool:
         return False
@@ -66,6 +71,31 @@ class StableEnd(Interval):
     def is_end(self) -> bool:
         return True
 
+
+class MemberStart(Interval):
+    def __init__(self, node : str, time: str, id : str):
+        super().__init__(time, id)
+        self.node = node
+
+    def get_name(self):
+        return f"Member-{self.node}${self.id}"
+
+    def get_node(self):
+        return self.node
+
+class MemberEnd(Interval):
+    def __init__(self, node : str, time: str, id : str):
+        super().__init__(time, id)
+        self.node = node
+
+    def get_name(self):
+        return f"Member-{self.node}${self.id}"
+
+    def is_end(self) -> bool:
+        return True
+
+    def get_node(self):
+        return self.node
 
 class Operation:
     def __init__(

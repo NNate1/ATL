@@ -4,7 +4,9 @@ import xml.etree.ElementTree as ET
 from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
+from itertools import pairwise
 from typing import OrderedDict,  cast
+
 
 from Operations import (
     NO_NODE,
@@ -20,18 +22,19 @@ from Operations import (
     ReadOnlyEnd,
     Stable,
     StableEnd,
+    MemberStart,
+    MemberEnd,
     Reply,
     Store,
     Interval
 )
 
-# from Evaluator import evaluate
 
 # TODO:
-# Update states and regimens
-# Update Members
 # Update responsible
-# Starting Ending -> funcões
+# Update ideal
+# Starting Ending 
+# Read Initial members from log
 
 
 FILENAME = "C:\\Users\\nunop\\Documents\\MEIC\\Tese\\ATL\\DHTsATL.als"
@@ -93,6 +96,7 @@ def create_instance(
     operations: "dict[str, Operation]",
     stable_regimens: "dict[str, Operation]",
     readonly_regimens: "dict[str, Operation]",
+    members: "dict[str, MemberStart]",
 ):
     instance = ET.Element("instance")
 
@@ -172,10 +176,10 @@ def create_instance(
     find_node_responsible = add_element(instance, "field", "responsible", "22", "21")
 
     # Operation
-    operation_sig = add_element(instance, "sig", "this/Operation", "17", "11")
-    operation_sig.set("abstract", "yes")
+    functional_operation_sig = add_element(instance, "sig", "this/FunctionalOperation", "17", "11")
+    functional_operation_sig.set("abstract", "yes")
 
-    operation_node = add_element(instance, "field", "node", "23", "17")
+    functional_operation_node = add_element(instance, "field", "node", "23", "17")
 
     operation_replier = add_element(instance, "field", "replier", "24", "17")
 
@@ -202,13 +206,9 @@ def create_instance(
 
     # ReadOnly
     read_only_sig = add_element(instance, "sig", "this/ReadOnlyRegimen", "32", "11")
-    for read_only in readonly_regimens.values():
-        add_element(read_only_sig, "atom", read_only.get_name())
 
     # Stable
     stable_sig = add_element(instance, "sig", "this/StableRegimen", "33", "11")
-    for stable in stable_regimens.values():
-        add_element(stable_sig, "atom", stable.get_name())
 
     # Interval
     add_element(instance, "sig", "ATL/T", "34", "11")
@@ -235,27 +235,50 @@ def create_instance(
     # Ongoing
     ongoing_sig = add_element(instance, "sig", "ATL/Ongoing", "39")
     ongoing_sig.set("var", "yes")
-    # ET.SubElement(ongoing_sig, 'type', {"ID": "11"})
 
-    # Starting
-    starting_sig = add_element(instance, "sig", "ATL/Starting", "40")
-    starting_sig.set("var", "yes")
-    # ET.SubElement(ongoing_sig, 'type', {"ID": "39"})
+    # # Starting
+    # starting_sig = add_element(instance, "sig", "ATL/Starting", "40")
+    # starting_sig.set("var", "yes")
 
     # Ending
-    ending_sig = add_element(instance, "sig", "ATL/Ending", "41")
-    ending_sig.set("var", "yes")
-    # ET.SubElement(ongoing_sig, 'type', {"ID": "39"})
+    # ending_sig = add_element(instance, "sig", "ATL/Ending", "41")
+    # ending_sig.set("var", "yes")
+
+
+    ## Intervals
+
+    # ReadOnly Intervals:
+    for read_only in readonly_regimens.values():
+        add_element(read_only_sig, "atom", read_only.get_name())
+        add_tuple(interval_start, read_only.get_name(), read_only.get_time())
+        if end_time := read_only.get_end_time():
+            add_tuple(interval_end, read_only.get_name(), end_time)
+
+    # Stable Intervals:
+    for stable in stable_regimens.values():
+        add_element(stable_sig, "atom", stable.get_name())
+        add_tuple(interval_start, stable.get_name(), stable.get_time())
+        if end_time := stable.get_end_time():
+            add_tuple(interval_end, stable.get_name(), end_time)
+
+    # Member Intervals:
+    for member in members.values():
+        add_element(member_sig, "atom", member.get_name())
+        add_tuple(member_node, member.get_name(), member.get_node())
+
+        add_tuple(interval_start, member.get_name(), member.get_time())
+        if end_time := member.get_end_time():
+            add_tuple(interval_end, member.get_name(), end_time)
 
     for op in operations.values():
         if isinstance(op, FunctionalOperation):
-            add_tuple(operation_node, op.get_name(), op.get_node())
+            add_tuple(functional_operation_node, op.get_name(), op.get_node())
             add_tuple(operation_key, op.get_name(), op.get_key())
             add_tuple(operation_replier, op.get_name(), op.get_replier())
 
             add_tuple(interval_start, op.get_name(), op.get_time())
             if end_time := op.get_end_time():
-                add_tuple(interval_start, op.get_name(), end_time)
+                add_tuple(interval_end, op.get_name(), end_time)
 
             match op.get_type():
                 case "Store" | "Remove":
@@ -278,6 +301,10 @@ def create_instance(
         elif op.get_type() in ("Join", "Leave", "Fail"):
             add_tuple(membership_op_node, op.get_name(), op.get_node())
 
+            add_tuple(interval_start, op.get_name(), op.get_time())
+            if end_time := op.get_end_time():
+                add_tuple(interval_end, op.get_name(), end_time)
+
             match op.get_type():
                 case "Join":
                     add_element(join_sig, "atom", op.get_name())
@@ -297,7 +324,7 @@ def create_instance(
     add_types(lookup_values, "19", "6")
     add_types(find_node_responsible, "21", "4")
 
-    add_types(operation_node, "17", "4")
+    add_types(functional_operation_node, "17", "4")
     add_types(operation_replier, "17", "4")
     add_types(operation_key, "17", "5")
 
@@ -310,8 +337,8 @@ def create_instance(
     add_types(happens_sig, "9")
     add_types(ongoing_sig, "11")
 
-    add_types(starting_sig, "39")
-    add_types(ending_sig, "39")
+    # add_types(starting_sig, "39")
+    # add_types(ending_sig, "39")
 
     return instance
 
@@ -485,7 +512,6 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
                 ), f"line {line_count} {line}\n{components = }"
                 nodes.add(replier)
         elif optype in {"StartStableRegimen", "EndStableRegimen"}:
-            # TODO: Implement stable regimens
             pass
         else:
             logging.warning(f"Unknown operation type at line {line_count}: {line}")
@@ -509,24 +535,24 @@ def complete_trace(
     instance_template: ET.Element,
     operations: dict[str, Operation],
     stable: dict[str, Interval],
-    readonly: dict[str, Interval]
+    readonly: dict[str, Interval],
+    members: dict[str, Interval],
 ):
     ongoing = set()
     prev = None
     instance = None
 
     ongoing_sig = None
-    starting_sig = None
-    ending_sig = None
+    # starting_sig = None
+    # ending_sig = None
+    happens_sig = None
 
     logging.info("Completing trace")
 
     # add stable and readonly to operations
-    events = operations | stable | readonly
-
+    events = operations | stable | readonly | members
 
     for (counter, (id, event)) in enumerate(sorted(events.items(), key=lambda x: x[1].get_time())):
-        
         counter += 1
         if counter % 100 == 0:
             logging.info(f"Generating event {counter}/{len(events)}")
@@ -542,10 +568,16 @@ def complete_trace(
             instance = deepcopy(instance_template)
 
             ongoing_sig = instance.find("sig[@label='ATL/Ongoing']")
-            starting_sig = instance.find("sig[@label='ATL/Starting']")
-            ending_sig = instance.find("sig[@label='ATL/Ending']")
+            # starting_sig = instance.find("sig[@label='ATL/Starting']")
+            # ending_sig = instance.find("sig[@label='ATL/Ending']")
+
+            happens_sig = instance.find("sig[@label='ATL/Happens']")
 
             assert ongoing_sig is not None, "Ongoing sig not found"
+            assert happens_sig is not None, "Happens sig not found"
+
+
+            add_element(happens_sig, "atom", event.get_time())
 
             for e in ongoing:
                 add_element(ongoing_sig, "atom", e.get_name())
@@ -555,21 +587,25 @@ def complete_trace(
             assert instance is not None, "Instance not created"
 
         assert ongoing_sig is not None, "Ongoing sig not found"
-        assert starting_sig is not None, "Starting sig not found"
-        assert ending_sig is not None, "Ending sig not found"
+        # assert starting_sig is not None, "Starting sig not found"
+        # assert ending_sig is not None, "Ending sig not found"
+
+        assert happens_sig is not None, "Happens sig not found"
 
         if event.is_end():
-            add_element(ending_sig, "atom", events[event.get_id()].get_name())
+            # add_element(ending_sig, "atom", events[event.get_id()].get_name())
             assert (
                 events[event.get_id()] in ongoing
             ), f"event {event.get_name()} not in ongoing"
             
             ongoing.remove(events[event.get_id()])
         else:
-            add_element(starting_sig, "atom", event.get_name())
+            # add_element(starting_sig, "atom", event.get_name())
             add_element(ongoing_sig, "atom", event.get_name())
             assert event not in ongoing, f"event {event.get_name()} already in ongoing"
             ongoing.add(event)
+
+
 
     if instance is not None:
         root.append(instance)
@@ -579,8 +615,6 @@ def complete_trace(
     instance = deepcopy(instance_template)
 
     ongoing_sig = instance.find("sig[@label='ATL/Ongoing']")
-    starting_sig = instance.find("sig[@label='ATL/Starting']")
-    ending_sig = instance.find("sig[@label='ATL/Ending']")
 
     assert ongoing_sig is not None, "Ongoing sig not found"
 
@@ -612,7 +646,7 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
             if ongoing_stable is not None:
                 ongoing_stable.set_end_time(prev)
 
-                end_stable = StableEnd(prev, ongoing_stable.get_id())
+                end_stable = StableEnd(prev, ongoing_stable.id)
                 stable_regimens["End-" + end_stable.get_id()] = end_stable
 
                 ongoing_stable = None
@@ -623,20 +657,21 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
 
         if op.get_type() in ("ReplyJoin" , "ReplyLeave", "Fail"):
             membership_ops.remove(op.get_id())
+
         # Readonly
         if op.get_type() in ("Store", "Remove"):
             write_ops.add(op.get_id())
             if ongoing_readonly is not None:
                 ongoing_readonly.set_end_time(prev)
 
-                end_readonly = ReadOnlyEnd(prev, ongoing_readonly.get_id())
+                end_readonly = ReadOnlyEnd(prev, ongoing_readonly.id)
                 readonly_regimens["End-" + end_readonly.get_id()] = end_readonly
 
                 ongoing_readonly = None
 
 
         if len(write_ops) == 0 and ongoing_readonly is None:
-            ongoing_readonly = ReadOnly(time, str(len(stable_regimens)))
+            ongoing_readonly = ReadOnly(time, str(len(readonly_regimens)))
             readonly_regimens[ongoing_readonly.get_id()] = ongoing_readonly
 
         if op.get_type() in ("ReplyStore" , "ReplyRemove"):
@@ -647,6 +682,82 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
         prev = time
 
     return stable_regimens, readonly_regimens
+
+
+
+def first(s):
+    '''Return the first element from an ordered collection
+       or an arbitrary element from an unordered collection.
+       Raise StopIteration if the collection is empty.
+    '''
+    return next(iter(s))
+
+def detect_members(operations: OrderedDict[str, Operation]) -> dict:
+
+    logging.debug(f"Detecting member intervals.")
+
+
+    membership_intervals = {}
+
+    current_members = {}
+
+    next_op = first(operations.values())
+    next_time = next_op.get_time()
+
+
+    #TODO: Read Initial members from log
+    initial_members = set()
+    initial_members.add(next_op.node) 
+
+    for node in initial_members:  
+            member = MemberStart(node, next_time, "M" + str(len(membership_intervals)))
+
+            assert node not in current_members, f"Node {node} is already a member, current members:\n{current_members}"
+
+            current_members[node] = member
+
+            membership_intervals[member.get_id()] = member
+
+    for op, next_op in pairwise(operations.values()):
+        
+        next_time = next_op.get_time()
+
+        logging.debug(f"Processing operation {op.get_name()} at {next_time}")
+
+        infer_member_interval (op, next_time, operations, membership_intervals , current_members )
+
+    if next_op:
+        assert next_time is not None
+        infer_member_interval (next_op, "1" + next_time, operations, membership_intervals , current_members )
+
+    return membership_intervals
+
+def infer_member_interval (op: Operation, next_time: str, operations : dict[str, Operation], membership_intervals : dict[str, Interval], current_members : dict[str, Interval]):
+        if op.get_type() == "ReplyJoin":
+            node = operations[op.get_id()].get_node()
+            member = MemberStart(node, next_time, "M" + str(len(membership_intervals)))
+
+            assert node not in current_members, f"Node {node} is already a member, current members:\n{current_members}"
+
+            current_members[node] = member
+
+            membership_intervals[member.get_id()] = member
+
+        elif op.get_type() in  ("ReplyLeave", "Fail"):
+            node = operations[op.get_id()].get_node()
+            assert node in current_members, f"Node {node} is not a member, current members:\n{current_members}"
+
+            start_member = current_members[node]
+            start_member.set_end_time(next_time)
+
+            end_member = MemberEnd(node, next_time, start_member.get_id())
+
+
+            membership_intervals["End-" + end_member.get_id()] = end_member
+
+            del current_members[node]
+
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -679,15 +790,43 @@ def main():
 
     (stable, readonly) = detect_regimens(operations)
 
+    logging.debug(f"Stable regimens: {stable}")
+    logging.debug(f"Readonly regimens: {readonly}")
+
+    members =  detect_members(operations)
+
+    logging.debug(f"Membership intervals: {members}")
+
+    # exit()
+
+    for regimen in stable.values():
+        times.add(regimen.get_time())
+        if regimen.get_end_time():
+            times.add(regimen.get_end_time())
+
+
+    for regimen in readonly.values():
+        times.add(regimen.get_time())
+        if regimen.get_end_time():
+            times.add(regimen.get_end_time())
+
+    for member in members.values():
+        times.add(member.get_time())
+        if member.get_end_time():
+            times.add(member.get_end_time())
 
     root = create_root()
-    instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly)
+    instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly, members)
+
+    # instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly)
 
 
 
 
-    complete_trace(root, instance_template, operations, stable, readonly)
+    complete_trace(root, instance_template, operations, stable, readonly, members)
 
+
+    logging.info(f"Writing XML trace to {args.output}")
     tree = ET.ElementTree(root)
     tree.write(args.output, encoding="utf-8", xml_declaration=True)
     logging.info(f"XML trace successfully written to {args.output}")
