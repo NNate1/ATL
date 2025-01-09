@@ -11,6 +11,7 @@ class Interval:
         self.start_time = start_time
         self.id = id
         self.end_time = None
+        self.node = ""
 
     def get_time(self):
         return self.start_time
@@ -96,6 +97,20 @@ class MemberEnd(Interval):
 
     def get_node(self):
         return self.node
+
+class IdealStart(Interval):
+    def __init__(self, time: str, id : str):
+        super().__init__(time, id)
+    def get_name(self):
+        return f"Ideal${self.id}"
+
+class IdealEnd(Interval):
+    def __init__(self, time: str, id : str):
+        super().__init__(time, id)
+    def get_name(self):
+        return f"Ideal${self.id}"
+    def is_end(self) -> bool:
+        return True
 
 class Operation:
     def __init__(

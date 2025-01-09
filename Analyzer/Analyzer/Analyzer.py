@@ -1,6 +1,8 @@
 import argparse
 import logging
 import xml.etree.ElementTree as ET
+import importlib
+
 from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
@@ -11,22 +13,24 @@ from typing import OrderedDict,  cast
 from Operations import (
     NO_NODE,
     NO_VALUE,
-    Fail,
-    FindNode,
-    FunctionalOperation,
-    Join,
-    Leave,
-    Lookup,
-    Operation,
+    Interval,
     ReadOnly,
     ReadOnlyEnd,
     Stable,
     StableEnd,
     MemberStart,
     MemberEnd,
-    Reply,
+    IdealStart,
+    IdealEnd,
+    Operation,
+    Join,
+    Leave,
+    Fail,
+    FunctionalOperation,
+    FindNode,
+    Lookup,
     Store,
-    Interval
+    Reply,
 )
 
 
@@ -93,10 +97,11 @@ def create_instance(
     keys: set[str],
     values: set[str],
     times: set[str],
-    operations: "dict[str, Operation]",
-    stable_regimens: "dict[str, Operation]",
-    readonly_regimens: "dict[str, Operation]",
-    members: "dict[str, MemberStart]",
+    operations: dict[str, Operation],
+    stable_regimens: dict[str, Stable | StableEnd],
+    readonly_regimens: dict[str, ReadOnly | ReadOnlyEnd],
+    members: OrderedDict[str, MemberStart| MemberEnd],
+    ideal_states: OrderedDict[str, IdealStart | IdealEnd]
 ):
     instance = ET.Element("instance")
 
@@ -269,6 +274,14 @@ def create_instance(
         add_tuple(interval_start, member.get_name(), member.get_time())
         if end_time := member.get_end_time():
             add_tuple(interval_end, member.get_name(), end_time)
+
+
+    # Ideal Intervals:
+    for ideal in ideal_states.values():
+        add_element(ideal_sig, "atom", ideal.get_name())
+        add_tuple(interval_start, ideal.get_name(), ideal.get_time())
+        if end_time := ideal.get_end_time():
+            add_tuple(interval_end, ideal.get_name(), end_time)
 
     for op in operations.values():
         if isinstance(op, FunctionalOperation):
@@ -534,9 +547,10 @@ def complete_trace(
     root: ET.Element, 
     instance_template: ET.Element,
     operations: dict[str, Operation],
-    stable: dict[str, Interval],
-    readonly: dict[str, Interval],
-    members: dict[str, Interval],
+    stable_regimens: dict[str, Stable | StableEnd],
+    readonly_regimens: dict[str, ReadOnly | ReadOnlyEnd],
+    members: OrderedDict[str, MemberStart| MemberEnd],
+    ideal_states: OrderedDict[str, IdealStart | IdealEnd]
 ):
     ongoing = set()
     prev = None
@@ -550,7 +564,7 @@ def complete_trace(
     logging.info("Completing trace")
 
     # add stable and readonly to operations
-    events = operations | stable | readonly | members
+    events = operations | stable_regimens | readonly_regimens | members | ideal_states
 
     for (counter, (id, event)) in enumerate(sorted(events.items(), key=lambda x: x[1].get_time())):
         counter += 1
@@ -692,12 +706,12 @@ def first(s):
     '''
     return next(iter(s))
 
-def detect_members(operations: OrderedDict[str, Operation]) -> dict:
+def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, MemberStart | MemberEnd]:
 
     logging.debug(f"Detecting member intervals.")
 
 
-    membership_intervals = {}
+    membership_intervals = OrderedDict()
 
     current_members = {}
 
@@ -759,14 +773,31 @@ def infer_member_interval (op: Operation, next_time: str, operations : dict[str,
 
 
 
+def detect_ideal(ideal_log: Path, limit_time: str, keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
+
+    raise NotImplementedError("Ideal state detection not implemented")
+
+# def detect_ideal(ideal_log: Path, members: dict[str, Interval]) -> tuple[dict, dict]:
+#     raise NotImplementedError("Ideal state detection not implemented")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "logfile", type=Path, help="Path to the log file to process."
+        "-f", required=True, dest='log', type=Path, help="Path to the log file to process."
     )
     parser.add_argument(
-        "output", type=Path, help="Path to save the generated XML file."
+        "-o", required=True, dest='output', type=Path, help="Path to save the generated XML file."
     )
+
+    parser.add_argument(
+        "-i", required=True, dest='ideal_log', type=Path, help="Path to the log file with ideal state information"
+    )
+
+
+    parser.add_argument(
+        "-p", "-ip", required=True, dest='ideal_parser', type=Path, help="Path to the python file which can parse the ideal state information"
+    )
+
     parser.add_argument(
         "--max-lines", type=int, default=float("inf"), help="Maximum number of lines to process."
     )
@@ -776,6 +807,7 @@ def main():
 
     args = parser.parse_args()
 
+
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s"
@@ -784,7 +816,7 @@ def main():
     )
 
 
-    with args.logfile.open("r", encoding="utf-8") as log:
+    with args.log.open("r", encoding="utf-8") as log:
         nodes, keys, values, times, operations = read_log(log, max_lines=args.max_lines)
 
 
@@ -797,7 +829,20 @@ def main():
 
     logging.debug(f"Membership intervals: {members}")
 
-    # exit()
+
+
+
+    module = importlib.import_module(args.ideal_parser.stem)
+
+    detect_ideal = getattr(module, "detect_ideal")
+
+    limit_time = max(times)
+
+    (ideal_states, responsibility) = detect_ideal(args.ideal_log, limit_time, keys, operations, members)
+    # (ideal_states, responsibility) = detect_ideal(args.ideal_log, members)
+
+    logging.debug(f"Ideal intervals: {ideal_states}")
+    logging.debug(f"Responsibility intervals: {responsibility}")
 
     for regimen in stable.values():
         times.add(regimen.get_time())
@@ -812,30 +857,27 @@ def main():
 
     for member in members.values():
         times.add(member.get_time())
-        if member.get_end_time():
-            times.add(member.get_end_time())
+        end_time = member.get_end_time()
+        if end_time is not None:
+            times.add(end_time)
+
+    
+    for state in ideal_states.values():
+        times.add(state.get_time())
+        end_time = state.get_end_time()
+        if end_time is not None:
+            times.add(end_time)
 
     root = create_root()
-    instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly, members)
-
-    # instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly)
+    instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly, members, ideal_states)
 
 
-
-
-    complete_trace(root, instance_template, operations, stable, readonly, members)
-
+    complete_trace(root, instance_template, operations, stable, readonly, members, ideal_states)
 
     logging.info(f"Writing XML trace to {args.output}")
     tree = ET.ElementTree(root)
     tree.write(args.output, encoding="utf-8", xml_declaration=True)
     logging.info(f"XML trace successfully written to {args.output}")
-
-    # class_path = Path(
-    #     "/mnt/c/Users/nunop/Documents/MEIC/Tese/_org.alloytools.alloy.dist.jar"
-    # )
-    # source_path = Path("/mnt/c/Users/nunop/Documents/MEIC/Tese/ATL/DHTsATL.als")
-    # evaluate(log_folder / p.name, class_path, source_path)
 
 
 if __name__ == "__main__":
