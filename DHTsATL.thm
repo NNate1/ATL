@@ -1,7 +1,3 @@
-<!-- 
- SPDX-License-Identifier: MIT 
- Copyright (C) 2024 Nuno Policarpo
- -->
 <?xml version="1.0"?>
 <alloy>
 
@@ -12,27 +8,27 @@
 <defaultedge/>
 
 <node>
+   <type name="Bottom"/>
    <type name="Fail"/>
    <type name="FindNode"/>
+   <type name="FunctionalOperation"/>
    <type name="Int"/>
    <type name="Join"/>
    <type name="Leave"/>
    <type name="Lookup"/>
    <type name="Member"/>
    <type name="MembershipOperation"/>
-   <type name="Operation"/>
    <type name="Responsible"/>
    <type name="Store"/>
    <type name="String"/>
    <type name="Value"/>
+   <type name="WriteableValue"/>
    <type name="ATL/Boundary"/>
    <type name="ATL/Interval"/>
    <type name="ATL/P"/>
    <type name="ATL/Proposition"/>
    <type name="ATL/T"/>
    <type name="seq/Int"/>
-   <set name="$ValueFreshness_ideal" type="IdealState"/>
-   <set name="$ValueFreshness_lookup" type="Lookup"/>
    <set name="ATL/Happens" type="ATL/Boundary"/>
 </node>
 
@@ -86,11 +82,10 @@
    <relation name="node"> <type name="MembershipOperation"/> <type name="Node"/> </relation>
    <relation name="node"> <type name="Responsible"/> <type name="Node"/> </relation>
    <relation name="value"> <type name="Lookup"/> <type name="Value"/> </relation>
-   <relation name="value"> <type name="Store"/> <type name="Value"/> </relation>
+   <relation name="value"> <type name="Store"/> <type name="WriteableValue"/> </relation>
 </edge>
 
 <edge visible="no" attribute="yes">
-   <relation name="key"> <type name="Operation"/> <type name="Key"/> </relation>
    <relation name="responsible"> <type name="FindNode"/> <type name="Node"/> </relation>
 </edge>
 

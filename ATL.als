@@ -36,7 +36,7 @@ abstract sig Interval {
 	end : lone Boundary,
 }
 
-var sig Happens in Boundary {}
+var lone sig Happens in Boundary {}
 
 var sig Ongoing in Interval {}
 
@@ -123,6 +123,7 @@ fact {
 
 	// All boundaries belong to an interval
 	Boundary in Interval.(start+end)
+
 }
 
 

@@ -80,7 +80,13 @@ fun Visual_Member: Node{
  * - Key
 */
 
-sig Key, Value {}
+sig Key {}
+
+abstract sig Value {}
+lone sig Bottom extends Value {}
+
+sig WriteableValue extends Value {}
+
 
 sig Node extends Key {}
 
@@ -107,7 +113,7 @@ abstract sig FunctionalOperation extends Interval {
 }
 
 sig Store extends FunctionalOperation {
-	value: one Value,
+	value: one WriteableValue,
 }
 
 sig Lookup extends FunctionalOperation {
@@ -334,7 +340,7 @@ pred Axioms{
  */
 pred LookupConsistency {
 	all lookup : Lookup {
-		Finite[lookup] implies 
+		(lookup.value != Bottom && Finite[lookup]) implies 
 			some store : Store {
 				store.key = lookup.key
 				store.value = lookup.value
@@ -574,26 +580,41 @@ pred TerminationCompleteness {
 /* 
  * Runs
  */
-
+/*
+run Empty {} for 2  but 0 Key, 0 Value
 run Member {
 	Axioms
 	some Member
 } for 4 but 5 Interval
-/*
+
 run Store {
 	Axioms
 	some st : Store | Finite[st]
-} for 8 but 1 Operation, 5 Interval
+} for 8 but 1 FunctionalOperation, 5 Interval
 
 run Lookup{
 	Axioms
 	some l : Lookup | Finite[l]
-} for 8 but 2 Operation
+} for 8 but 2 FunctionalOperation
+
+run LookupWriteable{
+	Axioms
+	some l : Lookup { Finite[l]
+		l.value in WriteableValue
+	}
+} for 8 but 2 FunctionalOperation
+
+run Lookup_Bottom{
+	Axioms
+	some l : Lookup { Finite[l]
+		l.value = Bottom
+	}
+} for 8 but 2 FunctionalOperation
 
 run FindNode{
 	Axioms
 	some find : FindNode| Finite[find]
-} for 8 but 1 Operation
+} for 8 but 1 FunctionalOperation
 
 run Fail{
 	Axioms
@@ -808,6 +829,7 @@ check A3_ValueFreshness_Implies_WeakValueFreshness for
 check A4_ValueFreshness_Implies_LookupConsistency for 
 	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0
 
+/*
 check A1_No_Member_Operations for 
 	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..15 steps expect 0
 
@@ -834,3 +856,4 @@ check A3_ValueFreshness_Implies_WeakValueFreshness for
 
 check A4_ValueFreshness_Implies_LookupConsistency for 
 	10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition, 1..20 steps expect 0
+*/

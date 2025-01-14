@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import importlib
 import os
 
+from xml.dom import minidom
 from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
@@ -37,10 +38,8 @@ from Operations import (
 
 # TODO:
 # Update responsible
-# Update ideal
 # Starting Ending 
 # Read Initial members from log
-
 
 
 UNUSED_TAG = -1
@@ -48,6 +47,49 @@ UNUSED_TAG = -1
 # NO_VALUE = "NoValue"
 # NO_REPONSIBLE = "NoResponsible"
 
+
+
+### IDs
+UNIV_ID = "2"
+STRING_ID = "3"
+NODE_ID = "4"
+KEY_ID = "5"
+BOTTOM_ID = "6"
+VALUE_ID = "7"
+WRITEABLE_VALUE_ID = "8"
+P_ID = "9"
+PROPOSITION_ID = "10"
+BOUNDARY_ID = "11"
+MEMBER_ID = "12"
+INTERVAL_ID = "13"
+MEMBER_NODE_ID = "14"
+RESPONSIBLE_ID = "15"
+RESPONSIBLE_NODE_ID = "16"
+RESPONSIBLE_KEY_ID = "17"
+STORE_ID = "18"
+FUNCTIONAL_OPERATION_ID = "19"
+STORE_VALUE_ID = "20"
+LOOKUP_ID = "21"
+LOOKUP_VALUE_ID = "22"
+FIND_NODE_ID = "23"
+FIND_NODE_RESPONSIBLE_ID = "24"
+FUNCTIONAL_OPERATION_NODE_ID = "25"
+FUNCTIONAL_OPERATION_REPLIER_ID = "26"
+FUNCTIONAL_OPERATION_KEY_ID = "27"
+JOIN_ID = "28"
+MEMBERSHIP_OPERATION_ID = "29"
+LEAVE_ID = "30"
+FAIL_ID = "31"
+MEMBERSHIP_OPERATION_NODE_ID = "32"
+IDEAL_STATE_ID = "33"
+READ_ONLY_REGIMEN_ID = "34"
+STABLE_REGIMEN_ID = "35"
+T_ID = "36"
+INTERVAL_START_ID = "37"
+INTERVAL_END_ID = "38"
+ACTIVE_ID = "39"
+HAPPENS_ID = "40"
+ONGOING_ID = "41"
 
 def create_root() -> ET.Element:
     root = ET.Element("alloy", builddate="2021-11-03T15:25:43.736Z")
@@ -125,122 +167,134 @@ def create_instance(
     # Not required
     # add_builtin(instance, "seq/Int", "0", "1")
     # add_builtin(instance, "Int", "1", "2")
-    # add_builtin(instance, "String", "3", "2")
+    # add_builtin(instance, "String", "3", UNIV_ID)
 
     # Node
-    node_sig = add_element(instance, "sig", "this/Node", "4", "5")
+    node_sig = add_element(instance, "sig", "this/Node", NODE_ID, KEY_ID)
     for node in nodes:
-        # add_element(node_sig, "atom", id_node(node))
         add_element(node_sig, "atom", node)
 
     add_element(node_sig, "atom", NO_NODE)
 
     # Key
-    key_sig = add_element(instance, "sig", "this/Key", "5", "2")
+    key_sig = add_element(instance, "sig", "this/Key", KEY_ID, UNIV_ID)
     for key in keys:
         add_element(key_sig, "atom", key)
 
     # Value
-    value_sig = add_element(instance, "sig", "this/Value", "6", "2")
-    for value in values:
-        add_element(value_sig, "atom", value)
+    bottom_sig = add_element(instance, "sig", "this/Bottom", BOTTOM_ID, VALUE_ID)
+    bottom_sig.set("lone", "yes")
 
-    add_element(value_sig, "atom", NO_VALUE)
+    writeable_sig = add_element(instance, "sig", "this/WriteableValue", WRITEABLE_VALUE_ID, VALUE_ID)
+    value_sig = add_element(instance, "sig", "this/Value", VALUE_ID, UNIV_ID)
+
+    value_sig.set("abstract", "yes")
+
+
+
+    for value in values:
+        if value == NO_VALUE:
+            add_element(bottom_sig, "atom", value)
+        else:
+            add_element(writeable_sig, "atom", value)
+
+    # add_element(value_sig, "atom", NO_VALUE)
 
     # Proposition
-    add_element(instance, "sig", "ATL/P", "7", "8")
-    prop = add_element(instance, "sig", "ATL/Proposition", "8", "2")
+    add_element(instance, "sig", "ATL/P", P_ID, PROPOSITION_ID)
+    prop = add_element(instance, "sig", "ATL/Proposition", PROPOSITION_ID, UNIV_ID)
     prop.set("abstract", "yes")
 
     # Boundary
-    boundary_sig = add_element(instance, "sig", "ATL/Boundary", "9", "2")
+    boundary_sig = add_element(instance, "sig", "ATL/Boundary", BOUNDARY_ID, UNIV_ID)
     # for boundary in times.values():
     for boundary in times:
         add_element(boundary_sig, "atom", boundary)
 
     # Member
-    member_sig = add_element(instance, "sig", "this/Member", "10", "11")
-    member_node = add_element(instance, "field", "node", "12", "10")
+    member_sig = add_element(instance, "sig", "this/Member", MEMBER_ID, INTERVAL_ID)
+    member_node = add_element(instance, "field", "node", MEMBER_NODE_ID, MEMBER_ID)
 
     # Responsible
-    responsible_sig = add_element(instance, "sig", "this/Responsible", "13", "11")
-    responsible_node = add_element(instance, "field", "node", "14", "13")
-    responsible_key = add_element(instance, "field", "key", "15", "13")
+    responsible_sig = add_element(instance, "sig", "this/Responsible", RESPONSIBLE_ID, INTERVAL_ID)
+    responsible_node = add_element(instance, "field", "node", RESPONSIBLE_NODE_ID, RESPONSIBLE_ID)
+    responsible_key = add_element(instance, "field", "key", RESPONSIBLE_KEY_ID, RESPONSIBLE_ID)
 
     # Store
-    store_sig = add_element(instance, "sig", "this/Store", "16", "17")
+    store_sig = add_element(instance, "sig", "this/Store", STORE_ID, FUNCTIONAL_OPERATION_ID)
 
-    store_values = add_element(instance, "field", "value", "18", "16")
+    store_values = add_element(instance, "field", "value", STORE_VALUE_ID, STORE_ID)
 
     # Lookup
-    lookup_sig = add_element(instance, "sig", "this/Lookup", "19", "17")
+    lookup_sig = add_element(instance, "sig", "this/Lookup", LOOKUP_ID, FUNCTIONAL_OPERATION_ID)
 
-    lookup_values = add_element(instance, "field", "value", "20", "19")
+    lookup_values = add_element(instance, "field", "value", LOOKUP_VALUE_ID, LOOKUP_ID)
 
     # Find Node
-    find_node_sig = add_element(instance, "sig", "this/FindNode", "21", "17")
+    find_node_sig = add_element(instance, "sig", "this/FindNode", FIND_NODE_ID, FUNCTIONAL_OPERATION_ID)
 
-    find_node_responsible = add_element(instance, "field", "responsible", "22", "21")
+    find_node_responsible = add_element(instance, "field", "responsible", FIND_NODE_RESPONSIBLE_ID, FIND_NODE_ID)
 
     # Operation
-    functional_operation_sig = add_element(instance, "sig", "this/FunctionalOperation", "17", "11")
+    functional_operation_sig = add_element(instance, "sig", "this/FunctionalOperation", FUNCTIONAL_OPERATION_ID, INTERVAL_ID)
     functional_operation_sig.set("abstract", "yes")
 
-    functional_operation_node = add_element(instance, "field", "node", "23", "17")
+    functional_operation_node = add_element(instance, "field", "node", FUNCTIONAL_OPERATION_NODE_ID, FUNCTIONAL_OPERATION_ID)
 
-    operation_replier = add_element(instance, "field", "replier", "24", "17")
+    functional_operation_replier = add_element(instance, "field", "replier", FUNCTIONAL_OPERATION_REPLIER_ID, FUNCTIONAL_OPERATION_ID)
 
-    operation_key = add_element(instance, "field", "key", "25", "17")
+    functional_operation_key = add_element(instance, "field", "key", FUNCTIONAL_OPERATION_KEY_ID, FUNCTIONAL_OPERATION_ID)
 
     # Join
-    join_sig = add_element(instance, "sig", "this/Join", "26", "27")
+    join_sig = add_element(instance, "sig", "this/Join", JOIN_ID, MEMBERSHIP_OPERATION_ID)
 
     # Leave
-    leave_sig = add_element(instance, "sig", "this/Leave", "28", "27")
+    leave_sig = add_element(instance, "sig", "this/Leave", LEAVE_ID, MEMBERSHIP_OPERATION_ID)
 
     # Fail
-    fail_sig = add_element(instance, "sig", "this/Fail", "29", "27")
+    fail_sig = add_element(instance, "sig", "this/Fail", FAIL_ID, MEMBERSHIP_OPERATION_ID)
+
     # Membership Operation
     membership_op_sig = add_element(
-        instance, "sig", "this/MembershipOperation", "27", "11"
+        instance, "sig", "this/MembershipOperation", MEMBERSHIP_OPERATION_ID, INTERVAL_ID
     )
     membership_op_sig.set("abstract", "yes")
 
-    membership_op_node = add_element(instance, "field", "node", "30", "27")
+    membership_op_node = add_element(instance, "field", "node", MEMBERSHIP_OPERATION_NODE_ID, MEMBERSHIP_OPERATION_ID)
 
     # Ideal
-    ideal_sig = add_element(instance, "sig", "this/IdealState", "31", "11")
+    ideal_sig = add_element(instance, "sig", "this/IdealState", IDEAL_STATE_ID, INTERVAL_ID)
 
     # ReadOnly
-    read_only_sig = add_element(instance, "sig", "this/ReadOnlyRegimen", "32", "11")
+    read_only_sig = add_element(instance, "sig", "this/ReadOnlyRegimen", READ_ONLY_REGIMEN_ID, INTERVAL_ID)
 
     # Stable
-    stable_sig = add_element(instance, "sig", "this/StableRegimen", "33", "11")
+    stable_sig = add_element(instance, "sig", "this/StableRegimen", STABLE_REGIMEN_ID, INTERVAL_ID)
 
     # Interval
-    add_element(instance, "sig", "ATL/T", "34", "11")
-    interval_sig = add_element(instance, "sig", "ATL/Interval", "11", "2")
+    add_element(instance, "sig", "ATL/T", T_ID, INTERVAL_ID)
+    interval_sig = add_element(instance, "sig", "ATL/Interval", INTERVAL_ID, UNIV_ID)
     interval_sig.set("abstract", "yes")
 
-    interval_start = add_element(instance, "field", "start", "35", "11")
+    interval_start = add_element(instance, "field", "start", INTERVAL_START_ID, INTERVAL_ID)
 
-    interval_end = add_element(instance, "field", "end", "36", "11")
+    interval_end = add_element(instance, "field", "end", INTERVAL_END_ID, INTERVAL_ID)
 
     # Universal
-    univ = add_element(instance, "sig", "univ", "2")
+    univ = add_element(instance, "sig", "univ", UNIV_ID)
     univ.set("builtin", "yes")
     univ.set("var", "yes")
 
     # Active
-    active_sig = add_element(instance, "sig", "ATL/Active", "37")
+    active_sig = add_element(instance, "sig", "ATL/Active", ACTIVE_ID)
     active_sig.set("var", "yes")
 
     # Happens
-    happens_sig = add_element(instance, "sig", "ATL/Happens", "38")
+    happens_sig = add_element(instance, "sig", "ATL/Happens", HAPPENS_ID)
     happens_sig.set("var", "yes")
 
     # Ongoing
-    ongoing_sig = add_element(instance, "sig", "ATL/Ongoing", "39")
+    ongoing_sig = add_element(instance, "sig", "ATL/Ongoing", ONGOING_ID)
     ongoing_sig.set("var", "yes")
 
     # # Starting
@@ -288,8 +342,8 @@ def create_instance(
     for op in operations.values():
         if isinstance(op, FunctionalOperation):
             add_tuple(functional_operation_node, op.get_name(), op.get_node())
-            add_tuple(operation_key, op.get_name(), op.get_key())
-            add_tuple(operation_replier, op.get_name(), op.get_replier())
+            add_tuple(functional_operation_key, op.get_name(), op.get_key())
+            add_tuple(functional_operation_replier, op.get_name(), op.get_replier())
 
             add_tuple(interval_start, op.get_name(), op.get_time())
             if end_time := op.get_end_time():
@@ -330,27 +384,27 @@ def create_instance(
                 case "Fail":
                     add_element(fail_sig, "atom", op.get_name())
 
-    add_types(member_node, "10", "4")
+    add_types(member_node, MEMBER_ID, NODE_ID)
 
-    add_types(responsible_node, "13", "4")
-    add_types(responsible_key, "13", "5")
+    add_types(responsible_node, RESPONSIBLE_ID, NODE_ID)
+    add_types(responsible_key, RESPONSIBLE_ID, KEY_ID)
 
-    add_types(store_values, "16", "6")
-    add_types(lookup_values, "19", "6")
-    add_types(find_node_responsible, "21", "4")
+    add_types(store_values, STORE_ID, WRITEABLE_VALUE_ID)
+    add_types(lookup_values, LOOKUP_ID, VALUE_ID)
+    add_types(find_node_responsible, FIND_NODE_ID, NODE_ID)
 
-    add_types(functional_operation_node, "17", "4")
-    add_types(operation_replier, "17", "4")
-    add_types(operation_key, "17", "5")
+    add_types(functional_operation_node, FUNCTIONAL_OPERATION_ID, NODE_ID)
+    add_types(functional_operation_replier, FUNCTIONAL_OPERATION_ID, NODE_ID)
+    add_types(functional_operation_key, FUNCTIONAL_OPERATION_ID, KEY_ID)
 
-    add_types(membership_op_node, "27", "4")
+    add_types(membership_op_node, MEMBERSHIP_OPERATION_ID, NODE_ID)
 
-    add_types(interval_start, "11", "9")
-    add_types(interval_end, "11", "9")
+    add_types(interval_start, INTERVAL_ID, BOUNDARY_ID)
+    add_types(interval_end, INTERVAL_ID, BOUNDARY_ID)
 
-    add_types(active_sig, "8")
-    add_types(happens_sig, "9")
-    add_types(ongoing_sig, "11")
+    add_types(active_sig, PROPOSITION_ID)
+    add_types(happens_sig, BOUNDARY_ID)
+    add_types(ongoing_sig, INTERVAL_ID)
 
     # add_types(starting_sig, "39")
     # add_types(ending_sig, "39")
@@ -787,6 +841,7 @@ def main():
     parser.add_argument(
         "-f", required=True, dest='log', type=Path, help="Path to the log file to process."
     )
+
     parser.add_argument(
         "-o", required=True, dest='output', type=Path, help="Path to save the generated XML file."
     )
@@ -842,9 +897,6 @@ def main():
 
     logging.debug(f"Membership intervals: {members}")
 
-
-
-
     module = importlib.import_module(args.ideal_parser.stem)
 
     detect_ideal = getattr(module, "detect_ideal")
@@ -881,6 +933,8 @@ def main():
         if end_time is not None:
             times.add(end_time)
 
+
+
     root = create_root()
     instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states)
 
@@ -892,6 +946,10 @@ def main():
     tree.write(args.output, encoding="utf-8", xml_declaration=True)
     logging.info(f"XML trace successfully written to {args.output}")
 
+
+    # xml_str = ET.tostring(root, encoding="unicode")
+    # readable = minidom.parseString(xml_str).toprettyxml()
+    # print(readable)
 
 if __name__ == "__main__":
     main()
