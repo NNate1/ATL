@@ -14,8 +14,17 @@ import java.io.File;
 public class Evaluator {
 	public static void main(String[] args) throws Exception {
 		String filename = args[0];
-		// String sourcepath = args[1];
-		String sourcepath = "/mnt/c/Users/nunop/Documents/MEIC/Tese/ATL/DHTsATL.als";
+
+		String sourcepath = System.getenv("ATL_MODEL");
+
+		if (sourcepath == null) {
+
+			System.out.println("ATL_MODEL environment variable not set.");
+			System.out.println(
+					"Set the ATL_MODEL environment variable to the path of the Alloy ATL model file.");
+			return;
+
+		}
 
 		System.out.println("Loading trace...\n");
 		System.out.flush();
@@ -51,15 +60,13 @@ public class Evaluator {
 
 		for (String expression : expressions) {
 			System.out.println("Evaluating " + expression);
-			// System.out.flush();
+			System.out.flush();
 
 			startTime = System.nanoTime();
 			Expr e = CompUtil.parseOneExpression_fromString(ansWorld, expression);
 			endTime = System.nanoTime();
 			elapsed_seconds = (endTime - startTime) / 1_000_000_000.0;
 			System.out.println(expression + ": " + ans.eval(e) + ", " + elapsed_seconds + "s");
-			// System.out.println(expression + ": " + ans.eval(e) + ", " + (endTime -
-			// startTime) / 1_000_000_000+ "s");
 		}
 	}
 }

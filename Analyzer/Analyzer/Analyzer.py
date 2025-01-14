@@ -2,6 +2,7 @@ import argparse
 import logging
 import xml.etree.ElementTree as ET
 import importlib
+import os
 
 from copy import deepcopy
 from io import TextIOWrapper
@@ -41,7 +42,7 @@ from Operations import (
 # Read Initial members from log
 
 
-FILENAME = "C:\\Users\\nunop\\Documents\\MEIC\\Tese\\ATL\\DHTsATL.als"
+
 UNUSED_TAG = -1
 # NO_REPLIER = "NoReplier"
 # NO_VALUE = "NoValue"
@@ -93,6 +94,7 @@ def add_types(field, id1: str, id2: str = ""):
 
 
 def create_instance(
+    model_file : str,
     nodes: set[str],
     keys: set[str],
     values: set[str],
@@ -113,7 +115,7 @@ def create_instance(
     instance.set("maxtrace", str(len(times) + 1))  # + 1 for backloop instance
     instance.set("command", "Run run$1 for 10")
 
-    instance.set("filename", FILENAME)
+    instance.set("filename", model_file)
     # instance.set("tracelength", "2")
     instance.set("tracelength", str(len(times) + 1))
     # instance.set("backloop", "1")
@@ -816,6 +818,17 @@ def main():
     )
 
 
+
+
+    model_file = os.getenv("ATL_MODEL")
+    if model_file is None:
+        print("ATL_MODEL environment variable not set.")
+        print("Please set the ATL_MODEL environment variable to the path of the Alloy model file.")
+        exit()
+
+    
+    model_file = os.path.abspath(model_file)
+
     with args.log.open("r", encoding="utf-8") as log:
         nodes, keys, values, times, operations = read_log(log, max_lines=args.max_lines)
 
@@ -869,7 +882,7 @@ def main():
             times.add(end_time)
 
     root = create_root()
-    instance_template = create_instance(nodes, keys, values, times, operations, stable, readonly, members, ideal_states)
+    instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states)
 
 
     complete_trace(root, instance_template, operations, stable, readonly, members, ideal_states)
