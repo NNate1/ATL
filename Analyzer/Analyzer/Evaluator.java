@@ -59,14 +59,15 @@ public class Evaluator {
 		};
 
 		for (String expression : expressions) {
-			System.out.println("Evaluating " + expression);
+			System.out.print(expression + ": ");
 			System.out.flush();
 
 			startTime = System.nanoTime();
 			Expr e = CompUtil.parseOneExpression_fromString(ansWorld, expression);
+			var result = ans.eval(e);
 			endTime = System.nanoTime();
 			elapsed_seconds = (endTime - startTime) / 1_000_000_000.0;
-			System.out.println(expression + ": " + ans.eval(e) + ", " + elapsed_seconds + "s");
+			System.out.println(elapsed_seconds + "s\n" + result);
 		}
 	}
 }

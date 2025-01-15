@@ -10,7 +10,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from itertools import pairwise
 from typing import OrderedDict,  cast
-
+from pprint import pprint
 
 from Operations import (
     NO_NODE,
@@ -18,6 +18,8 @@ from Operations import (
     Interval,
     ReadOnly,
     ReadOnlyEnd,
+    ResponsibleEnd,
+    ResponsibleStart,
     Stable,
     StableEnd,
     MemberStart,
@@ -37,7 +39,6 @@ from Operations import (
 
 
 # TODO:
-# Update responsible
 # Starting Ending 
 # Read Initial members from log
 
@@ -145,7 +146,8 @@ def create_instance(
     stable_regimens: dict[str, Stable | StableEnd],
     readonly_regimens: dict[str, ReadOnly | ReadOnlyEnd],
     members: OrderedDict[str, MemberStart| MemberEnd],
-    ideal_states: OrderedDict[str, IdealStart | IdealEnd]
+    ideal_states: OrderedDict[str, IdealStart | IdealEnd],
+    responsible_intervals: dict[str, ResponsibleStart | ResponsibleEnd]
 ):
     instance = ET.Element("instance")
 
@@ -338,6 +340,14 @@ def create_instance(
         add_tuple(interval_start, ideal.get_name(), ideal.get_time())
         if end_time := ideal.get_end_time():
             add_tuple(interval_end, ideal.get_name(), end_time)
+
+    for responsible in responsible_intervals.values():
+        add_element(responsible_sig, "atom", responsible.get_name())
+        add_tuple(responsible_node, responsible.get_name(), responsible.get_node())
+        add_tuple(responsible_key, responsible.get_name(), responsible.get_key())
+        add_tuple(interval_start, responsible.get_name(), responsible.get_time())
+        if end_time := responsible.get_end_time():
+            add_tuple(interval_end, responsible.get_name(), end_time)
 
     for op in operations.values():
         if isinstance(op, FunctionalOperation):
@@ -593,7 +603,7 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
     logging.info(f"lines read: {line_count}")
     logging.info(f"operations types: {op_counts}")
     logging.info(f"operations and replies recorded: {len(operations)}")
-    logging.info(f"timestamps recorded: {len(times)}")
+    logging.info(f"operation timestamps: {len(times)}")
 
     return nodes, keys, values, times, operations
 
@@ -606,7 +616,8 @@ def complete_trace(
     stable_regimens: dict[str, Stable | StableEnd],
     readonly_regimens: dict[str, ReadOnly | ReadOnlyEnd],
     members: OrderedDict[str, MemberStart| MemberEnd],
-    ideal_states: OrderedDict[str, IdealStart | IdealEnd]
+    ideal_states: OrderedDict[str, IdealStart | IdealEnd],
+    responsibility_intervals: dict[str, ResponsibleStart | ResponsibleEnd]
 ):
     ongoing = set()
     prev = None
@@ -619,8 +630,7 @@ def complete_trace(
 
     logging.info("Completing trace")
 
-    # add stable and readonly to operations
-    events = operations | stable_regimens | readonly_regimens | members | ideal_states
+    events = operations | stable_regimens | readonly_regimens | members | ideal_states | responsibility_intervals
 
     for (counter, (id, event)) in enumerate(sorted(events.items(), key=lambda x: x[1].get_time())):
         counter += 1
@@ -756,10 +766,6 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
 
 
 def first(s):
-    '''Return the first element from an ordered collection
-       or an arbitrary element from an unordered collection.
-       Raise StopIteration if the collection is empty.
-    '''
     return next(iter(s))
 
 def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, MemberStart | MemberEnd]:
@@ -829,12 +835,9 @@ def infer_member_interval (op: Operation, next_time: str, operations : dict[str,
 
 
 
-def detect_ideal(ideal_log: Path, limit_time: str, keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
+def get_ideal_responsible(ideal_log: Path, limit_time: str, keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
 
     raise NotImplementedError("Ideal state detection not implemented")
-
-# def detect_ideal(ideal_log: Path, members: dict[str, Interval]) -> tuple[dict, dict]:
-#     raise NotImplementedError("Ideal state detection not implemented")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -899,12 +902,12 @@ def main():
 
     module = importlib.import_module(args.ideal_parser.stem)
 
-    detect_ideal = getattr(module, "detect_ideal")
+    ideal_function = getattr(module, get_ideal_responsible.__name__)
+    assert ideal_function is not None, f"Function {ideal_function.__name__} not found in {args.ideal_parser.stem}"
 
     limit_time = max(times)
 
-    (ideal_states, responsibility) = detect_ideal(args.ideal_log, limit_time, keys, operations, members)
-    # (ideal_states, responsibility) = detect_ideal(args.ideal_log, members)
+    (ideal_states, responsibility) = ideal_function(args.ideal_log, limit_time, keys, operations, members)
 
     logging.debug(f"Ideal intervals: {ideal_states}")
     logging.debug(f"Responsibility intervals: {responsibility}")
@@ -934,12 +937,21 @@ def main():
             times.add(end_time)
 
 
+    for r in responsibility.values():
+        times.add(r.get_time())
+        end_time = r.get_end_time()
+        if end_time is not None:
+            times.add(end_time)
+
+
+
+    logging.info(f"total timestamps: {len(times)}")
 
     root = create_root()
-    instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states)
+    instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states, responsibility)
 
 
-    complete_trace(root, instance_template, operations, stable, readonly, members, ideal_states)
+    complete_trace(root, instance_template, operations, stable, readonly, members, ideal_states, responsibility)
 
     logging.info(f"Writing XML trace to {args.output}")
     tree = ET.ElementTree(root)

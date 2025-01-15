@@ -8,7 +8,9 @@ from Operations import (
     MemberEnd,
     IdealStart,
     IdealEnd,
-    Operation
+    Operation,
+    ResponsibleEnd,
+    ResponsibleStart
 )
 
 
@@ -26,7 +28,17 @@ class Pointer:
     def __repr__(self):
         return self.__str__()
 
-def detect_ideal(ideal_log: Path, limit_time: str, keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
+# Circular order
+def between(a: str, b: str, c: str) -> bool:
+    if a == c:
+        return True
+
+    if a < c:
+        return a < b and b <= c
+
+    return a <= b or b < c
+
+def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
 
     op_iter = 0
     op_list = sorted(operations.values(), key=lambda x: x.get_time())
@@ -36,20 +48,24 @@ def detect_ideal(ideal_log: Path, limit_time: str, keys: set[str], operations: O
 
     current_members = []
     
-    pointers = {}
+    pointers : dict[str,Pointer] = {}
 
 
     ongoing_ideal = None
     ideal_states = OrderedDict()
 
-    responsibilites = {}
+
+    ongoing_responsibilities = {}
+    responsible_intervals = OrderedDict()
+
 
     with open(ideal_log, 'r') as f:
         for line in f:
-            time, op, member, succ = line.strip().split(', ')
+            time, _, member, succ = line.strip().split(', ')
             if time > limit_time:
                 break
 
+            ## Infer current members
             while member_iter < len(member_list) and member_list[member_iter].get_time() < time:
                 member = member_list[member_iter].get_node()
                 pos = bisect.bisect_left(current_members, member)
@@ -64,14 +80,62 @@ def detect_ideal(ideal_log: Path, limit_time: str, keys: set[str], operations: O
 
                 member_iter += 1
 
-
-
             if succ == "null":
                 succ = None
 
             pointers[member] = Pointer(member, succ)
 
 
+            #### Responsible
+            new_responsibilities = {}
+            for pointer in pointers.values():
+                node = pointer.node
+                succ = pointer.succ
+
+                if succ is None:
+
+                    new_responsibilities[node] = all_keys
+                    continue
+
+                new_keys = new_responsibilities.get(succ, set())
+                new_responsibilities[succ] = new_keys
+
+
+                for key in all_keys:
+                    if between(node, key, succ):
+                        new_keys.add(key)
+
+
+            for pointer in pointers.values():
+                node = pointer.succ
+
+                if node is None:
+                    node = pointer.node
+
+                prev_keys = ongoing_responsibilities.get(node, set())
+                new_keys = new_responsibilities.get(node, set())
+
+
+                for key in prev_keys ^ new_keys:
+                    if key not in prev_keys:
+                        r_start = ResponsibleStart(node, key, time, str(len(responsible_intervals)))
+                        responsible_intervals[r_start.get_id()] = r_start
+                    else:
+                        for r_start in reversed(responsible_intervals.values()):
+                            if type(r_start) == ResponsibleStart and r_start.node == node and r_start.key == key:
+                                r_start.set_end_time(time)
+                                r_end = ResponsibleEnd(node, key, time, r_start.id)
+                                responsible_intervals["End-" + r_end.get_id()] = r_end
+
+                                break
+
+
+
+
+            ongoing_responsibilities = new_responsibilities
+
+
+            #### Ideal
             new_ideal = True
             for i in range(0, len(current_members)):
 
@@ -82,26 +146,30 @@ def detect_ideal(ideal_log: Path, limit_time: str, keys: set[str], operations: O
                 if is_not_in_pointers or (is_not_successor and is_not_only_node):
                     new_ideal = False
                     break 
-            # else:
-            #     new_ideal = True
 
             if new_ideal != (ongoing_ideal is not None):
+
+                while op_iter < len(op_list) - 1 and op_list[op_iter].get_time() < time:
+                    op_iter += 1
+
+                if op_iter == len(op_list) - 1:
+                    return ideal_states, responsible_intervals
+
+                time = op_list[op_iter].get_time()
+
                 if ongoing_ideal is None:
                     ongoing_ideal = IdealStart(time, str(len(ideal_states)))
                     ideal_states[ongoing_ideal.get_id()] = ongoing_ideal
 
                 else:
 
-                    while op_iter < len(op_list) and op_list[op_iter].get_time() < time:
-                        op_iter += 1
 
-                    end_time = op_list[op_iter].get_time()
-                    ongoing_ideal.set_end_time(end_time)
+                    ongoing_ideal.set_end_time(time)
 
-                    end_ideal = IdealEnd(end_time, ongoing_ideal.id)
+                    end_ideal = IdealEnd(time, ongoing_ideal.id)
                     ideal_states["End-" + end_ideal.get_id()] = end_ideal
 
                     ongoing_ideal = None
 
 
-    return ideal_states, responsibilites
+    return ideal_states, responsible_intervals
