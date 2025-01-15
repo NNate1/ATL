@@ -446,13 +446,15 @@ pred WeakValueFreshness {
  * about which member is responsible for a key.
  */
 pred KeyConsistency {
-	all ideal : IdealState, find1, find2 : FindNode {
+	all ideal : IdealState, stable : StableRegimen, disj find1, find2 : FindNode {
 		{
 			find1.key = find2.key
 			Finite[find1]
 			Finite[find2]
 			In[find1, ideal] or Equal[find1, ideal]
 			In[find2, ideal] or Equal[find2, ideal]
+			In[find1, stable] or Equal[find1, stable]
+			In[find2, stable] or Equal[find2, stable]
 		}
 		implies find1.responsible = find2.responsible
 	}
