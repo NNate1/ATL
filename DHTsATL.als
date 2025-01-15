@@ -380,6 +380,7 @@ pred ValueConsistency {
 pred ValueFreshness {
 	all lookup: Lookup {
 		{ 
+			lookup.value != Bottom
 			some ideal : IdealState {
 				Finite[lookup]
 				In[lookup, ideal] or Equal[lookup, ideal]
@@ -413,6 +414,7 @@ pred ValueFreshness {
 pred WeakValueFreshness {
 	all lookup: Lookup {
 		{
+			lookup.value != Bottom
 			some ideal : IdealState, readOnly : ReadOnlyRegimen {
 				Finite[lookup]
 				In[lookup, ideal] or Equal[lookup, ideal]
