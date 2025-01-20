@@ -1,6 +1,3 @@
-// package edu.mit.csail.sdg.alloy4whole;
-// package evaluator;
-
 import edu.mit.csail.sdg.alloy4.A4Reporter;
 import edu.mit.csail.sdg.alloy4.XMLNode;
 import edu.mit.csail.sdg.ast.Expr;
@@ -42,7 +39,6 @@ public class Evaluator {
 
 		double elapsed_seconds = (endTime - startTime) / 1_000_000_000.0;
 		System.out.println("\nLoaded trace, " + elapsed_seconds + "s\n");
-		System.out.flush();
 
 		String[] expressions = {
 				"KeyConsistency",
@@ -51,7 +47,9 @@ public class Evaluator {
 				"ValueFreshness",
 				"WeakValueFreshness",
 				"Reachability",
-				"MembershipGuarantee",
+				// "MembershipGuarantee",
+				"MembershipGuarantee_Responsible",
+				"MembershipGuarantee_Replier",
 				"FindNodeLookupConsistency",
 				"ResponsibilityTransfer",
 				"ResponsibilityExpiration",
@@ -59,15 +57,15 @@ public class Evaluator {
 		};
 
 		for (String expression : expressions) {
-			System.out.print(expression + ": ");
 			System.out.flush();
+			System.out.print(expression + ": ");
 
 			startTime = System.nanoTime();
 			Expr e = CompUtil.parseOneExpression_fromString(ansWorld, expression);
 			var result = ans.eval(e);
 			endTime = System.nanoTime();
 			elapsed_seconds = (endTime - startTime) / 1_000_000_000.0;
-			System.out.println(elapsed_seconds + "s\n" + result);
+			System.out.println(result.toString() + " " + elapsed_seconds + "s");
 		}
 	}
 }

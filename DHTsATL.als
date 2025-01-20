@@ -404,6 +404,7 @@ pred ValueFreshness {
 			})
 		}
 	}
+
 }
 
 /* P3 Weak Value Freshness
@@ -532,6 +533,11 @@ pred ResponsibilityTransfer{
  * at one instant during the execution of the operation
  */
 pred MembershipGuarantee {
+	MembershipGuarantee_Responsible
+	MembershipGuarantee_Replier
+}
+	
+/*pred MembershipGuarantee_FindNode {
 	all find: FindNode {
 		Finite[find] implies
 			some m : Member {
@@ -539,13 +545,80 @@ pred MembershipGuarantee {
 				Intersects[m, find]
 			}
 	}
+}*/
 
+pred MembershipGuarantee_Responsible {
+	all find: FindNode {
+		Finite[find] implies{
+			(some member : Member {
+				member.node = find.responsible
+				Initial[member]
+				no exit : Leave + Fail {
+					Precedes[exit, find]
+				}
+			})
+			or
+			(some j : Join {
+				(Precedes[j, find] or
+				Intersects[find, j]
+				)
+				j.node = find.responsible
+				no exit : Leave + Fail {
+					Precedes[j, exit]
+					Precedes[exit, find]
+
+					/* Responsible node exiting the network simultaneously with
+						the start of the FindNode operation is allowed
+						to prevent it: */
+					/*Starts[exit, find]
+					Starts[find, exit]*/
+					
+				}
+			})
+		}
+	}
+}
+
+/*
+pred MembershipGuarantee_Replier {
 	all op: FunctionalOperation {
 		Finite[op] implies
 			some m : Member {
 				m.node = op.replier
 				Intersects[m, op]
 			}
+	}
+}*/
+
+pred MembershipGuarantee_Replier {
+	all op: FunctionalOperation {
+		Finite[op] implies {
+			(some member : Member {
+				member.node = op.replier
+				Initial[member]
+				no exit : Leave + Fail {
+					Precedes[exit, op]
+				}
+			})
+			or
+			(some j : Join {
+				(Precedes[j, op] or
+				Intersects[op, j]
+				)
+				j.node = op.replier
+				no exit : Leave + Fail {
+					Precedes[j, exit]
+					Precedes[exit, op]
+
+					/* Responsible node exiting the network simultaneously with
+						the start of the FindNode operation is allowed
+						to prevent it: */
+					/*Starts[exit, find]
+					Starts[find, exit]*/
+					
+				}
+			})
+		}
 	}
 }
 
@@ -584,7 +657,7 @@ pred TerminationCompleteness {
 /* 
  * Runs
  */
-/*
+
 run Empty {} for 2  but 0 Key, 0 Value
 run Member {
 	Axioms
@@ -652,7 +725,7 @@ run ReadOnly {
 	Axioms
 	some ReadOnlyRegimen
 } for 6
-*/
+
 
 /*
  * Valid Scenarios 
