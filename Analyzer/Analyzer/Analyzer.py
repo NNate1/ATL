@@ -8,7 +8,7 @@ from xml.dom import minidom
 from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
-from itertools import pairwise
+# from itertools import pairwise
 from typing import OrderedDict,  cast
 from pprint import pprint
 
@@ -180,7 +180,7 @@ def create_instance(
 
     # Key
     key_sig = add_element(instance, "sig", "this/Key", KEY_ID, UNIV_ID)
-    for key in keys:
+    for key in keys - nodes:
         add_element(key_sig, "atom", key)
 
     # Value
@@ -314,14 +314,16 @@ def create_instance(
     for read_only in readonly_regimens.values():
         add_element(read_only_sig, "atom", read_only.get_name())
         add_tuple(interval_start, read_only.get_name(), read_only.get_time())
-        if end_time := read_only.get_end_time():
+        end_time = read_only.get_end_time()
+        if end_time:
             add_tuple(interval_end, read_only.get_name(), end_time)
 
     # Stable Intervals:
     for stable in stable_regimens.values():
         add_element(stable_sig, "atom", stable.get_name())
         add_tuple(interval_start, stable.get_name(), stable.get_time())
-        if end_time := stable.get_end_time():
+        end_time = stable.get_end_time()
+        if end_time:
             add_tuple(interval_end, stable.get_name(), end_time)
 
     # Member Intervals:
@@ -330,7 +332,8 @@ def create_instance(
         add_tuple(member_node, member.get_name(), member.get_node())
 
         add_tuple(interval_start, member.get_name(), member.get_time())
-        if end_time := member.get_end_time():
+        end_time = member.get_end_time()
+        if end_time:
             add_tuple(interval_end, member.get_name(), end_time)
 
 
@@ -338,15 +341,20 @@ def create_instance(
     for ideal in ideal_states.values():
         add_element(ideal_sig, "atom", ideal.get_name())
         add_tuple(interval_start, ideal.get_name(), ideal.get_time())
-        if end_time := ideal.get_end_time():
+        end_time = ideal.get_end_time()
+        if end_time:
             add_tuple(interval_end, ideal.get_name(), end_time)
 
     for responsible in responsible_intervals.values():
         add_element(responsible_sig, "atom", responsible.get_name())
         add_tuple(responsible_node, responsible.get_name(), responsible.get_node())
-        add_tuple(responsible_key, responsible.get_name(), responsible.get_key())
+        
+        for r_key in responsible.get_keys():
+            add_tuple(responsible_key, responsible.get_name(), r_key)
+
         add_tuple(interval_start, responsible.get_name(), responsible.get_time())
-        if end_time := responsible.get_end_time():
+        end_time = responsible.get_end_time()
+        if end_time:
             add_tuple(interval_end, responsible.get_name(), end_time)
 
     for op in operations.values():
@@ -356,21 +364,21 @@ def create_instance(
             add_tuple(functional_operation_replier, op.get_name(), op.get_replier())
 
             add_tuple(interval_start, op.get_name(), op.get_time())
-            if end_time := op.get_end_time():
+            end_time = op.get_end_time()
+            if end_time:
                 add_tuple(interval_end, op.get_name(), end_time)
 
-            match op.get_type():
-                case "Store" | "Remove":
+            if op.get_type() in ("Store", "Remove"):
                     op = cast(Store, op)
                     add_element(store_sig, "atom", op.get_name())
                     add_tuple(store_values, op.get_name(), op.get_value())
 
-                case "Lookup":
+            elif op.get_type() == "Lookup":
                     op = cast(Lookup, op)
                     add_element(lookup_sig, "atom", op.get_name())
                     add_tuple(lookup_values, op.get_name(), op.get_value())
 
-                case "FindNode":
+            elif op.get_type() == "FindNode":
                     op = cast(FindNode, op)
                     add_element(find_node_sig, "atom", op.get_name())
                     add_tuple(
@@ -381,17 +389,19 @@ def create_instance(
             add_tuple(membership_op_node, op.get_name(), op.get_node())
 
             add_tuple(interval_start, op.get_name(), op.get_time())
-            if end_time := op.get_end_time():
+
+            end_time = op.get_end_time()
+            if end_time:
                 add_tuple(interval_end, op.get_name(), end_time)
 
-            match op.get_type():
-                case "Join":
+            if op.get_type() == "Join":
                     add_element(join_sig, "atom", op.get_name())
 
-                case "Leave":
+            elif op.get_type() == "Leave":
                     add_element(leave_sig, "atom", op.get_name())
 
-                case "Fail":
+
+            elif op.get_type() == "Fail":
                     add_element(fail_sig, "atom", op.get_name())
 
     add_types(member_node, MEMBER_ID, NODE_ID)
@@ -467,15 +477,17 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
     ongoing = set()
 
+    line = None
     for line in log:
-        if line_count == max_lines:
+
+        if line_count >= max_lines:
             break
         line_count += 1
 
         components = list(map(lambda x: x.strip(","), line.strip().split(", ")))
 
 
-        logging.debug(f"line {line_count} {components}")
+        # logging.debug(f"line {line_count} {components}")
 
         time, optype = components[0:2]
         times.add(time)
@@ -489,38 +501,38 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
             op_counts[optype] = op_counts.get(optype, 0) + 1
 
-            match optype:
-                case "Store":
+            if optype == "Store":
                     op = Store(
                         time, optype, id, op_counts[optype], node, args[0], args[1]
                     )
                     keys.add(args[0])
                     values.add(args[1])
 
-                case "Remove":
+            elif optype == "Remove":
                     op = Store(
                         time, optype, id, op_counts[optype], node, args[0], NO_VALUE
                     )
                     keys.add(args[0])
                     # values.add(NO_VALUE)
-                case "Lookup":
+
+            elif optype == "Lookup":
                     op = Lookup(time, optype, id, op_counts[optype], node, args[0])
                     keys.add(args[0])
 
-                case "FindNode":
+            elif optype == "FindNode":
                     op = FindNode(time, optype, id, op_counts[optype], node, args[0])
                     keys.add(args[0])
 
-                case "Join":
+            elif optype == "Join":
                     op = Join(time, optype, id, op_counts[optype], node)
 
-                case "Leave":
+            elif optype == "Leave":
                     op = Leave(time, optype, id, op_counts[optype], node)
 
-                case "Fail":
+            elif optype == "Fail":
                     op = Fail(time, optype, id, op_counts[optype], node)
 
-                case _:
+            else:
                     logging.warning(
                         f"Unknown operation type at line {line_count}: {line}"
                     )
@@ -530,7 +542,8 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
                 operations[id] = op
                 ongoing.add(op)
 
-        elif optype.startswith("Reply"):
+        # elif optype.startswith("Reply"):
+        elif "Reply" in optype:
             id = components[2]
             replier = components[3] if len(components) > 3 else None
             args = components[4:] if len(components) > 4 else []
@@ -566,7 +579,7 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
             else:
 
-                logging.warning(f"""Reply for operation {id} received before operation started.\nline: {line_count} {line}""")
+                logging.warning(f"Reply for operation {id} received before operation started.\nline: {line_count} {line}")
                 
             if reply_optype == "Lookup":
 
@@ -583,12 +596,12 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
             ), f"line {line_count} {line}\n{components = }"
 
             if replier is not None:
-                assert reply_optype in (
-                    "Store",
-                    "Lookup",
-                    "FindNode",
-                    "Remove",
-                ), f"line {line_count} {line}\n{components = }"
+                # assert reply_optype in (
+                #     "Store",
+                #     "Lookup",
+                #     "FindNode",
+                #     "Remove",
+                # ), f"line {line_count} replier {replier} {line}\n{components = }"
                 nodes.add(replier)
         elif optype in {"StartStableRegimen", "EndStableRegimen"}:
             pass
@@ -596,14 +609,15 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
             logging.warning(f"Unknown operation type at line {line_count}: {line}")
 
     # logging.debug(operations)
-    logging.debug(f" times = {sorted(times)}")
-    logging.debug(f" {nodes = }")
-    logging.debug(f" {values = }")
-    logging.debug(f" {keys = }")
+    # logging.debug(f" times = {sorted(times)}")
+    # logging.debug(f" {nodes = }")
+    # logging.debug(f" {values = }")
+    # logging.debug(f" {keys = }")
     logging.info(f"lines read: {line_count}")
     logging.info(f"operations types: {op_counts}")
-    logging.info(f"operations and replies recorded: {len(operations)}")
-    logging.info(f"operation timestamps: {len(times)}")
+    # logging.info(f"operations and replies recorded: {len(operations)}")
+    # logging.info(f"operation timestamps: {len(times)}")
+
 
     return nodes, keys, values, times, operations
 
@@ -628,17 +642,18 @@ def complete_trace(
     # ending_sig = None
     happens_sig = None
 
-    logging.info("Completing trace")
 
     events = operations | stable_regimens | readonly_regimens | members | ideal_states | responsibility_intervals
+
+    logging.info(f"Completing trace with {len(events)} events")
 
     for (counter, (id, event)) in enumerate(sorted(events.items(), key=lambda x: x[1].get_time())):
         counter += 1
         if counter % 100 == 0:
             logging.info(f"Generating event {counter}/{len(events)}")
 
-        logging.debug(f"event {event.get_name()} at {event.get_time()}")
-        logging.debug(f"Ongoing: {ongoing}")
+        # logging.debug(f"event {event.get_name()} at {event.get_time()}")
+        # logging.debug(f"Ongoing: {ongoing}")
 
         if event.get_time() != prev:
             if instance is not None:
@@ -690,7 +705,7 @@ def complete_trace(
     if instance is not None:
         root.append(instance)
 
-    logging.info("Creating backloop instance")
+    logging.debug("Creating backloop instance")
 
     instance = deepcopy(instance_template)
 
@@ -714,11 +729,13 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
 
     prev = "" 
 
+
+    logging.debug(f"Infering Regimens")
+
     for op in operations.values():
         time = op.get_time()
 
 
-        logging.debug(f"Processing operation {op.get_name()} at {time}")
 
         # Stable
         if op.get_type() in ("Join" , "Leave", "Fail"):
@@ -735,7 +752,7 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
             ongoing_stable = Stable(time, str(len(stable_regimens)))
             stable_regimens[ongoing_stable.get_id()] = ongoing_stable
 
-        if op.get_type() in ("ReplyJoin" , "ReplyLeave", "Fail"):
+        if op.get_type() in ("ReplyJoin", "JoinReply", "ReplyLeave", "LeaveReply", "Fail"):
             membership_ops.remove(op.get_id())
 
         # Readonly
@@ -754,7 +771,7 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
             ongoing_readonly = ReadOnly(time, str(len(readonly_regimens)))
             readonly_regimens[ongoing_readonly.get_id()] = ongoing_readonly
 
-        if op.get_type() in ("ReplyStore" , "ReplyRemove"):
+        if op.get_type() in ("ReplyStore", "StoreReply", "ReplyRemove", "RemoveReply"):
                     write_ops.remove(op.get_id())
 
 
@@ -783,7 +800,9 @@ def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, 
 
     #TODO: Read Initial members from log
     initial_members = set()
-    initial_members.add(next_op.node) 
+
+    if next_op.get_type() != "Join":
+        initial_members.add(next_op.node) 
 
     for node in initial_members:  
             member = MemberStart(node, next_time, "M" + str(len(membership_intervals)))
@@ -794,22 +813,31 @@ def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, 
 
             membership_intervals[member.get_id()] = member
 
-    for op, next_op in pairwise(operations.values()):
+    # for op, next_op in pairwise(operations.values()):
+    op = None
+    next_op = None
+    for next_op in operations.values():
+        if op is None:
+            op = next_op
         
         next_time = next_op.get_time()
 
-        logging.debug(f"Processing operation {op.get_name()} at {next_time}")
+        # logging.debug(f"Processing operation {op.get_name()} at {next_time}")
 
         infer_member_interval (op, next_time, operations, membership_intervals , current_members )
 
+        op = next_op
+
     if next_op:
         assert next_time is not None
-        infer_member_interval (next_op, "1" + next_time, operations, membership_intervals , current_members )
+        # TODO: Temporary time padding for last operation
+
+        infer_member_interval (next_op, "9" + next_time, operations, membership_intervals , current_members )
 
     return membership_intervals
 
 def infer_member_interval (op: Operation, next_time: str, operations : dict[str, Operation], membership_intervals : dict[str, Interval], current_members : dict[str, Interval]):
-        if op.get_type() == "ReplyJoin":
+        if op.get_type() in ("ReplyJoin", "JoinReply"):
             node = operations[op.get_id()].get_node()
             member = MemberStart(node, next_time, "M" + str(len(membership_intervals)))
 
@@ -819,14 +847,14 @@ def infer_member_interval (op: Operation, next_time: str, operations : dict[str,
 
             membership_intervals[member.get_id()] = member
 
-        elif op.get_type() in  ("ReplyLeave", "Fail"):
+        elif op.get_type() in  ("ReplyLeave", "LeaveReply", "Fail"):
             node = operations[op.get_id()].get_node()
             assert node in current_members, f"Node {node} is not a member, current members:\n{current_members}"
 
             start_member = current_members[node]
             start_member.set_end_time(next_time)
 
-            end_member = MemberEnd(node, next_time, start_member.get_id())
+            end_member = MemberEnd(node, next_time, start_member.id)
 
 
             membership_intervals["End-" + end_member.get_id()] = end_member
@@ -891,13 +919,23 @@ def main():
         nodes, keys, values, times, operations = read_log(log, max_lines=args.max_lines)
 
 
+    logging.info(f" {len(nodes)} Nodes")
+    logging.info(f" {len(values)} Values")
+    logging.info(f" {len(keys)} Keys")
+    logging.info(f" {len(operations)} operations and replies recorded")
+    logging.info(f" {len(times)} operation timestamps")
+
     (stable, readonly) = detect_regimens(operations)
+
+    logging.info(f"{len(stable)} Stable regimens")
+    logging.info(f"{len(readonly)} Readonly regimens")
 
     logging.debug(f"Stable regimens: {stable}")
     logging.debug(f"Readonly regimens: {readonly}")
 
     members =  detect_members(operations)
 
+    logging.info(f"{len(members)} Member intervals")
     logging.debug(f"Membership intervals: {members}")
 
     module = importlib.import_module(args.ideal_parser.stem)
@@ -909,8 +947,17 @@ def main():
 
     (ideal_states, responsibility) = ideal_function(args.ideal_log, limit_time, keys, operations, members)
 
+
+    logging.info(f"{len(ideal_states)} Ideal intervals" )
+    logging.info(f"{len(responsibility)} Responsibility Intervals" )
+
+
+
     logging.debug(f"Ideal intervals: {ideal_states}")
     logging.debug(f"Responsibility intervals: {responsibility}")
+
+
+
 
     for regimen in stable.values():
         times.add(regimen.get_time())
@@ -945,7 +992,7 @@ def main():
 
 
 
-    logging.info(f"total timestamps: {len(times)}")
+    logging.info(f"Total timestamps: {len(times)}")
 
     root = create_root()
     instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states, responsibility)

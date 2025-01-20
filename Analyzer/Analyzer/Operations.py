@@ -112,6 +112,49 @@ class IdealEnd(Interval):
     def is_end(self) -> bool:
         return True
 
+
+class ResponsibleStart(Interval):
+    def __init__(self, node : str, keys : set[str], time: str, id : str):
+        super().__init__(time, id)
+        self.node = node
+        self.keys = keys
+
+    def get_keys(self):
+        return self.keys
+
+    def add_key(self, key):
+        self.keys.add(key)
+
+    def get_name(self):
+        return f"Responsible-{self.node}${self.id}"
+
+    def get_node(self):
+        return self.node
+
+    def __str__(self):
+        return f"{super().__str__()} Node: {self.node} keys ({len(self.keys)}): {self.keys}"
+
+class ResponsibleEnd(Interval):
+    def __init__(self, node : str, keys : set[str], time: str, id : str):
+        super().__init__(time, id)
+        self.node = node
+        self.keys = keys
+
+    def get_keys(self):
+        return self.keys
+
+    def get_name(self):
+        return f"Responsible-{self.node}${self.id}"
+    
+    def is_end(self) -> bool:
+        return True
+
+    def get_node(self):
+        return self.node
+
+    # def __str__(self):
+    #     return f"END {super().__str__()} Node: {self.node} key: {self}"
+
 class Operation:
     def __init__(
         self,
@@ -120,7 +163,7 @@ class Operation:
         id: str,
         tag: int,
         node: str,
-        end_time: str | None = None,
+        end_time = None,
     ):
         self.time = time
         self.optype = optype
@@ -169,7 +212,7 @@ class Reply(Operation):
         optype: str,
         id: str,
         tag: int,
-        node: str | None = None,
+        node = None,
     ):
         super().__init__(time, optype, id, tag, node or NO_REPLIER)
 
@@ -190,8 +233,8 @@ class FunctionalOperation(Operation):
         tag: int,
         node: str,
         key: str,
-        replier: str | None = None,
-        end_time: str | None = None,
+        replier = None,
+        end_time = None,
     ):
         super().__init__(time, optype, id, tag, node, end_time)
         self.key = key
@@ -222,8 +265,8 @@ class Store(FunctionalOperation):
         node: str,
         key: str,
         value: str,
-        replier: str | None = None,
-        end_time: str | None = None,
+        replier = None,
+        end_time = None,
     ):
         super().__init__(time, optype, id, tag, node, key, replier, end_time)
         self.value = value
@@ -249,9 +292,9 @@ class Lookup(FunctionalOperation):
         tag: int,
         node: str,
         key: str,
-        value: str | None = None,
-        replier: str | None = None,
-        end_time: str | None = None,
+        value = None,
+        replier = None,
+        end_time = None,
     ):
         super().__init__(time, optype, id, tag, node, key, replier, end_time)
         self.value = value
@@ -305,7 +348,7 @@ class Join(Operation):
         id: str,
         tag: int,
         node: str,
-        end_time: str | None = None,
+        end_time = None,
     ):
         super().__init__(time, optype, id, tag, node, end_time)
 
@@ -318,7 +361,7 @@ class Leave(Operation):
         id: str,
         tag: int,
         node: str,
-        end_time: str | None = None,
+        end_time = None,
     ):
         super().__init__(time, optype, id, tag, node, end_time)
 

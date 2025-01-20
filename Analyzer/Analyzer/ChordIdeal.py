@@ -1,5 +1,6 @@
 import bisect 
 
+# from pprint import pprint
 from typing import OrderedDict
 from pathlib import Path
 
@@ -28,15 +29,19 @@ class Pointer:
     def __repr__(self):
         return self.__str__()
 
+
 # Circular order
 def between(a: str, b: str, c: str) -> bool:
     if a == c:
         return True
 
+    if a == b:
+        return False
+
     if a < c:
         return a < b and b <= c
 
-    return a <= b or b < c
+    return a <= b or b <= c
 
 def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
 
@@ -67,16 +72,16 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
 
             ## Infer current members
             while member_iter < len(member_list) and member_list[member_iter].get_time() < time:
-                member = member_list[member_iter].get_node()
-                pos = bisect.bisect_left(current_members, member)
+                membership_node = member_list[member_iter].get_node()
+                pos = bisect.bisect_left(current_members, membership_node)
 
 
                 if member_list[member_iter].is_end():
-                    assert not (pos < len(current_members) and current_members[pos] != member), f"Node {member_list[member_iter].get_node()} is not a member, current members:\n{current_members}"
+                    assert not (pos < len(current_members) and current_members[pos] != membership_node), f"Node {member_list[member_iter].get_node()} is not a member, current members:\n{current_members}"
                     current_members.pop(pos)
                 else:
-                    assert not (pos < len(current_members) and current_members[pos] == member), f"Node {member_list[member_iter].get_node()} is already a member, current members:\n{current_members}"
-                    current_members.insert(pos, member)
+                    assert not (pos < len(current_members) and current_members[pos] == membership_node), f"Node {member_list[member_iter].get_node()} is already a member, current members:\n{current_members}"
+                    current_members.insert(pos, membership_node)
 
                 member_iter += 1
 
@@ -86,6 +91,12 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
             pointers[member] = Pointer(member, succ)
 
 
+
+            # print("-"*20)
+            # print(f"Time: {time}")
+            # print(f"Line: {line}")
+            # pprint(pointers)
+
             #### Responsible
             new_responsibilities = {}
             for pointer in pointers.values():
@@ -94,6 +105,7 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
 
                 if succ is None:
 
+                    # print(f"Node {node} is responsible for all keys")
                     new_responsibilities[node] = all_keys
                     continue
 
@@ -101,9 +113,14 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
                 new_responsibilities[succ] = new_keys
 
 
+
+                # print(f"Node {node}, succ {succ}")
                 for key in all_keys:
+                    # print(f"Checking key {key}")
                     if between(node, key, succ):
+                        # print(f"Adding key {key} to {succ}")
                         new_keys.add(key)
+
 
 
             for pointer in pointers.values():
@@ -115,19 +132,21 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
                 prev_keys = ongoing_responsibilities.get(node, set())
                 new_keys = new_responsibilities.get(node, set())
 
+                # print(pointer.node, pointer.succ)
+                # pprint(new_keys)
 
-                for key in prev_keys ^ new_keys:
-                    if key not in prev_keys:
-                        r_start = ResponsibleStart(node, key, time, str(len(responsible_intervals)))
-                        responsible_intervals[r_start.get_id()] = r_start
-                    else:
-                        for r_start in reversed(responsible_intervals.values()):
-                            if type(r_start) == ResponsibleStart and r_start.node == node and r_start.key == key:
-                                r_start.set_end_time(time)
-                                r_end = ResponsibleEnd(node, key, time, r_start.id)
-                                responsible_intervals["End-" + r_end.get_id()] = r_end
+                if new_keys != prev_keys:
+                    # print(f"Node {node} keys: {new_keys},\nold keys: {prev_keys}")
+                    for r_start in reversed(responsible_intervals.values()):
+                        if type(r_start) == ResponsibleStart and r_start.node == node:
+                            # print(f"End {r_start.get_id()} at {time}")
+                            r_start.set_end_time(time)
+                            r_end = ResponsibleEnd(node, r_start.get_keys(), time, r_start.id)
+                            responsible_intervals["End-" + r_end.get_id()] = r_end
+                            break
 
-                                break
+                    r_start = ResponsibleStart(node, new_keys, time, str(len(responsible_intervals)))
+                    responsible_intervals[r_start.get_id()] = r_start
 
 
 
@@ -139,11 +158,14 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
             new_ideal = True
             for i in range(0, len(current_members)):
 
-                is_not_in_pointers = current_members[i] not in pointers
+                if current_members[i] not in pointers:
+                    new_ideal = False
+                    break
+
                 is_not_successor = pointers[current_members[i]].succ != current_members[(i + 1) % len(current_members)]
                 is_not_only_node = len(current_members) != 1 or pointers[current_members[i]].succ is not None
 
-                if is_not_in_pointers or (is_not_successor and is_not_only_node):
+                if (is_not_successor and is_not_only_node):
                     new_ideal = False
                     break 
 
