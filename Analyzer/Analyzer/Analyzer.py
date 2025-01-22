@@ -5,7 +5,7 @@ import importlib
 import os
 
 from xml.dom import minidom
-from copy import deepcopy
+from copy import copy, deepcopy
 from io import TextIOWrapper
 from pathlib import Path
 # from itertools import pairwise
@@ -145,8 +145,8 @@ def create_instance(
     operations: dict[str, Operation],
     stable_regimens: dict[str, Stable | StableEnd],
     readonly_regimens: dict[str, ReadOnly | ReadOnlyEnd],
-    members: OrderedDict[str, MemberStart| MemberEnd],
-    ideal_states: OrderedDict[str, IdealStart | IdealEnd],
+    members: dict[str, MemberStart| MemberEnd],
+    ideal_states: dict[str, IdealStart | IdealEnd],
     responsible_intervals: dict[str, ResponsibleStart | ResponsibleEnd]
 ):
     instance = ET.Element("instance")
@@ -730,12 +730,10 @@ def detect_regimens(operations: OrderedDict[str, Operation]) -> tuple[dict, dict
     prev = "" 
 
 
-    logging.debug(f"Infering Regimens")
+    logging.debug(f"Detecting Regimens")
 
     for op in operations.values():
         time = op.get_time()
-
-
 
         # Stable
         if op.get_type() in ("Join" , "Leave", "Fail"):
@@ -863,6 +861,13 @@ def infer_member_interval (op: Operation, next_time: str, operations : dict[str,
 
 
 
+def filter_operations(operations: OrderedDict[str, Operation], types: set[str]) -> OrderedDict[str, Operation]:
+    for k, v in operations.copy().items():
+        if v.get_type() not in types:
+            del operations[k]
+
+    return operations
+
 def get_ideal_responsible(ideal_log: Path, limit_time: str, keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
 
     raise NotImplementedError("Ideal state detection not implemented")
@@ -889,12 +894,49 @@ def main():
     parser.add_argument(
         "--max-lines", type=int, default=float("inf"), help="Maximum number of lines to process."
     )
+
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging."
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "-store", action="store_true", help="Add store operation information to the trace."
+    )
 
+    parser.add_argument(
+        "-lookup", action="store_true", help="Add lookup operation information to the trace."
+    )
+
+    parser.add_argument(
+        "-find", "-findnode", action="store_true", help="Add find node operation information to the trace."
+    )
+
+
+    parser.add_argument(
+        "-membership", "-member", action="store_true", help="Add membership operation information to the trace."
+    )
+
+    parser.add_argument(
+        "-read-only", action="store_true", help="Add read-only regimen information to the trace."
+    )
+
+    parser.add_argument(
+        "-stable", action="store_true", help="Add stable regimen information to the trace."
+    )
+
+    parser.add_argument(
+        "-ideal", action="store_true", help="Add ideal state information to the trace."
+    )
+
+    parser.add_argument(
+        "-responsible", action="store_true", help="Add responsible node information to the trace."
+    )
+
+    parser.add_argument(
+        "-all", action = "store_true", help="Add all information to the trace."
+    )
+
+    args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -904,20 +946,17 @@ def main():
     )
 
 
-
-
     model_file = os.getenv("ATL_MODEL")
     if model_file is None:
         print("ATL_MODEL environment variable not set.")
         print("Please set the ATL_MODEL environment variable to the path of the Alloy model file.")
         exit()
 
-    
+
     model_file = os.path.abspath(model_file)
 
     with args.log.open("r", encoding="utf-8") as log:
         nodes, keys, values, times, operations = read_log(log, max_lines=args.max_lines)
-
 
     logging.info(f" {len(nodes)} Nodes")
     logging.info(f" {len(values)} Values")
@@ -925,38 +964,117 @@ def main():
     logging.info(f" {len(operations)} operations and replies recorded")
     logging.info(f" {len(times)} operation timestamps")
 
-    (stable, readonly) = detect_regimens(operations)
+    flag_list =  [args.all, args.store, args.lookup, args.find, args.membership, args.read_only, args.stable, args.ideal, args.responsible]
+    args.all = args.all or not any(flag_list)
 
-    logging.info(f"{len(stable)} Stable regimens")
-    logging.info(f"{len(readonly)} Readonly regimens")
+    args.store = args.all or args.store
+    args.lookup = args.all or args.lookup
+    args.find = args.all or args.find
+    args.membership = args.all or args.membership
+    args.read_only = args.all or args.read_only
+    args.stable = args.all or args.stable
+    args.ideal = args.all or args.ideal
+    args.responsible = args.all or args.responsible
 
-    logging.debug(f"Stable regimens: {stable}")
-    logging.debug(f"Readonly regimens: {readonly}")
+    operation_filter = {"Lookup", "ReplyLookup", "Store", "ReplyStore", "FindNode", "ReplyFindNode", "Join", "ReplyJoin", "Leave", "ReplyLeave", "Fail"}
 
-    members =  detect_members(operations)
+
+    #### Removes lookup and findNode operations if not required
+    if not args.lookup:
+        operation_filter.remove("Lookup")
+        operation_filter.remove("ReplyLookup")
+
+    if not args.find:
+        operation_filter.remove("FindNode")
+        operation_filter.remove("ReplyFindNode")
+
+
+    #### Removes lookup and findNode operations if not required
+    operations = filter_operations(operations, operation_filter)
+    # read_filter = copy(operation_filter)
+
+
+    #### Detect membership intervals if membership or ideal intervals are required
+    if args.membership or args.ideal:
+        members =  detect_members(operations)
+    else:
+        members = OrderedDict()
+
+
+    #### Detect regimens if required
+    stable = {}
+    readonly = {}
+    if args.stable or args.read_only:
+        (stable, readonly) = detect_regimens(operations)
+
+    if not args.stable:
+        stable = {}
+
+    if not args.read_only:
+        readonly = {}
+
+
+    #### Removes store and membership operations if not required
+    if not args.store:
+        operation_filter.remove("Store")
+        operation_filter.remove("ReplyStore")
+
+    if not args.membership:
+        operation_filter.remove("Join") 
+        operation_filter.remove("ReplyJoin") 
+        operation_filter.remove("Leave") 
+        operation_filter.remove("ReplyLeave") 
+        operation_filter.remove("Fail") 
+
+    #### Removes store and membership operations if not required
+    if not args.store or not args.membership:
+        operations = filter_operations(operations, operation_filter)
+
+
+    #### Detect ideal states and responsibility intervals if not required
+    ideal_states = {}
+    responsibility = {}
+
+    if args.ideal or args.responsible:
+        module = importlib.import_module(args.ideal_parser.stem)
+
+        ideal_function = getattr(module, get_ideal_responsible.__name__)
+        assert ideal_function is not None, f"Function {ideal_function.__name__} not found in {args.ideal_parser.stem}"
+
+        limit_time = max(times)
+
+        (ideal_states, responsibility) = ideal_function(args.ideal_log, limit_time, keys, operations, members)
+
+        if not args.ideal:
+            ideal_states = {}
+        if not args.responsible:
+            responsibility = {}
+
+
+    if not (args.all or args.membership):
+        members = OrderedDict()
+
+    logging.info(f" {len(nodes)} Nodes")
+    logging.info(f" {len(values)} Values")
+    logging.info(f" {len(keys)} Keys")
+    logging.info(f" {len(operations)} operations and replies")
+    logging.info(f" {len(times)} operation timestamps")
 
     logging.info(f"{len(members)} Member intervals")
     logging.debug(f"Membership intervals: {members}")
 
-    module = importlib.import_module(args.ideal_parser.stem)
+    logging.info(f"{len(stable)} Stable regimens")
+    logging.debug(f"Stable regimens: {stable}")
 
-    ideal_function = getattr(module, get_ideal_responsible.__name__)
-    assert ideal_function is not None, f"Function {ideal_function.__name__} not found in {args.ideal_parser.stem}"
-
-    limit_time = max(times)
-
-    (ideal_states, responsibility) = ideal_function(args.ideal_log, limit_time, keys, operations, members)
+    logging.info(f"{len(readonly)} Readonly regimens")
+    logging.debug(f"Readonly regimens: {readonly}")
 
 
     logging.info(f"{len(ideal_states)} Ideal intervals" )
     logging.info(f"{len(responsibility)} Responsibility Intervals" )
 
-
-
     logging.debug(f"Ideal intervals: {ideal_states}")
     logging.debug(f"Responsibility intervals: {responsibility}")
-
-
 
 
     for regimen in stable.values():
@@ -990,21 +1108,31 @@ def main():
         if end_time is not None:
             times.add(end_time)
 
-
-
     logging.info(f"Total timestamps: {len(times)}")
+
+
 
     root = create_root()
     instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states, responsibility)
 
 
     complete_trace(root, instance_template, operations, stable, readonly, members, ideal_states, responsibility)
-
+    
     logging.info(f"Writing XML trace to {args.output}")
     tree = ET.ElementTree(root)
-    tree.write(args.output, encoding="utf-8", xml_declaration=True)
-    logging.info(f"XML trace successfully written to {args.output}")
 
+    # Comment active flags in xml
+    flag_names = ["all", "store", "lookup", "find", "membership", "read_only", "stable", "ideal", "responsible"]
+    # flag_list = [args.all, args.store, args.lookup, args.find, args.membership, args.read_only, args.stable, args.ideal, args.responsible]
+
+    active_flags = [name for name, value in zip(flag_names, flag_list) if value]
+    comment_text = f"Active flags: {', '.join(active_flags) }"
+    comment_bytes = f'<!-- {comment_text} -->\n'.encode('utf-8')
+
+    with open(args.output, 'wb') as f:
+        f.write(comment_bytes)
+        tree.write(f, encoding="utf-8", xml_declaration=False)
+        logging.info(f"XML trace successfully written to {args.output}")
 
     # xml_str = ET.tostring(root, encoding="unicode")
     # readable = minidom.parseString(xml_str).toprettyxml()
