@@ -43,6 +43,22 @@ def between(a: str, b: str, c: str) -> bool:
 
     return a <= b or b <= c
 
+
+def is_ideal(pointers: dict[str, Pointer], current_members: list[str]) -> bool:
+
+    for i in range(0, len(current_members)):
+
+        if current_members[i] not in pointers:
+            return False
+
+        is_not_successor = pointers[current_members[i]].succ != current_members[(i + 1) % len(current_members)]
+        is_not_only_node = len(current_members) != 1 or pointers[current_members[i]].succ is not None
+
+        if (is_not_successor and is_not_only_node):
+            return False
+
+    return True
+
 def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
 
     op_iter = 0
@@ -67,8 +83,6 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
     with open(ideal_log, 'r') as f:
         for line in f:
             time, _, member, succ = line.strip().split(', ')
-            if time > limit_time:
-                break
 
             ## Infer current members
             while member_iter < len(member_list) and member_list[member_iter].get_time() < time:
@@ -83,7 +97,31 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
                     assert not (pos < len(current_members) and current_members[pos] == membership_node), f"Node {member_list[member_iter].get_node()} is already a member, current members:\n{current_members}"
                     current_members.insert(pos, membership_node)
 
+
+
+                is_ideal_state = is_ideal(pointers, current_members)
+
+
+                if is_ideal_state != (ongoing_ideal is not None):
+                    member_time = member_list[member_iter].get_time()
+
+                    if ongoing_ideal is None:
+                        ongoing_ideal = IdealStart(member_time, str(len(ideal_states)))
+                        ideal_states[ongoing_ideal.get_id()] = ongoing_ideal
+
+                    else:
+                        ongoing_ideal.set_end_time(member_time)
+
+                        end_ideal = IdealEnd(member_time, ongoing_ideal.id)
+                        ideal_states["End-" + end_ideal.get_id()] = end_ideal
+
+                        ongoing_ideal = None
+
                 member_iter += 1
+
+
+            if time > limit_time:
+                break
 
             if succ == "null":
                 succ = None
@@ -155,19 +193,7 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
 
 
             #### Ideal
-            new_ideal = True
-            for i in range(0, len(current_members)):
-
-                if current_members[i] not in pointers:
-                    new_ideal = False
-                    break
-
-                is_not_successor = pointers[current_members[i]].succ != current_members[(i + 1) % len(current_members)]
-                is_not_only_node = len(current_members) != 1 or pointers[current_members[i]].succ is not None
-
-                if (is_not_successor and is_not_only_node):
-                    new_ideal = False
-                    break 
+            new_ideal = is_ideal(pointers, current_members)
 
             if new_ideal != (ongoing_ideal is not None):
 
