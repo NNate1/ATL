@@ -462,7 +462,7 @@ def id_node(node: str):
 # 2022-09-27 18:00:00.000, ReplyJoin, <ID>
 
 
-def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set[str], set[str], OrderedDict[str, Operation]]:
+def read_log(log: TextIOWrapper, starting_line, line_count) -> tuple[str | None, set[str], set[str], set[str], set[str], OrderedDict[str, Operation]]:
     nodes = set()
     keys = set()
     values = set()
@@ -473,16 +473,19 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
     operations = OrderedDict()
     op_counts = dict()
 
-    line_count = 0
 
     ongoing = set()
 
+    max_lines = starting_line + line_count
+    line_counter = 0
+    initial_time = None
     line = None
+
     for line in log:
 
-        if line_count >= max_lines:
+        if line_counter >= max_lines:
             break
-        line_count += 1
+        line_counter += 1
 
         components = list(map(lambda x: x.strip(","), line.strip().split(", ")))
 
@@ -491,6 +494,9 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
         time, optype = components[0:2]
         times.add(time)
+
+        if line_counter >= starting_line and initial_time is None:
+            initial_time = time
 
         if optype in {"Lookup", "Store", "FindNode", "Remove", "Join", "Leave", "Fail"}:
             id = components[2]
@@ -534,7 +540,7 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
             else:
                     logging.warning(
-                        f"Unknown operation type at line {line_count}: {line}"
+                        f"Unknown operation type at line {line_counter}: {line}"
                     )
 
             nodes.add(node)
@@ -579,7 +585,7 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
             else:
 
-                logging.warning(f"Reply for operation {id} received before operation started.\nline: {line_count} {line}")
+                logging.warning(f"Reply for operation {id} received before operation started.\nline: {line_counter} {line}")
                 
             if reply_optype == "Lookup":
 
@@ -593,7 +599,7 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
 
             assert reply_optype in ("Join", "Fail", "Leave") or (
                 replier is not None
-            ), f"line {line_count} {line}\n{components = }"
+            ), f"line {line_counter} {line}\n{components = }"
 
             if replier is not None:
                 # assert reply_optype in (
@@ -606,20 +612,20 @@ def read_log(log: TextIOWrapper, max_lines=200) -> tuple[set[str], set[str], set
         elif optype in {"StartStableRegimen", "EndStableRegimen"}:
             pass
         else:
-            logging.warning(f"Unknown operation type at line {line_count}: {line}")
+            logging.warning(f"Unknown operation type at line {line_counter}: {line}")
 
     # logging.debug(operations)
     # logging.debug(f" times = {sorted(times)}")
     # logging.debug(f" {nodes = }")
     # logging.debug(f" {values = }")
     # logging.debug(f" {keys = }")
-    logging.info(f"lines read: {line_count}")
+    logging.info(f"lines read: {line_counter}")
     logging.info(f"operations types: {op_counts}")
     # logging.info(f"operations and replies recorded: {len(operations)}")
     # logging.info(f"operation timestamps: {len(times)}")
 
 
-    return nodes, keys, values, times, operations
+    return initial_time, nodes, keys, values, times, operations
 
 
 
@@ -646,6 +652,8 @@ def complete_trace(
     events = operations | stable_regimens | readonly_regimens | members | ideal_states | responsibility_intervals
 
     logging.info(f"Completing trace with {len(events)} events")
+
+    # pprint(sorted(events.values(), key=lambda x: x.get_time()))
 
     for (counter, (id, event)) in enumerate(sorted(events.items(), key=lambda x: x[1].get_time())):
         counter += 1
@@ -689,15 +697,23 @@ def complete_trace(
 
         if event.is_end():
             # add_element(ending_sig, "atom", events[event.get_id()].get_name())
+
+            assert (
+                event.get_id() in events
+            ), f"id of event {event} not in events"
+
             assert (
                 events[event.get_id()] in ongoing
-            ), f"event {event.get_name()} not in ongoing"
+            ), f"event {event} not in ongoing"
             
             ongoing.remove(events[event.get_id()])
         else:
             # add_element(starting_sig, "atom", event.get_name())
+
+
             add_element(ongoing_sig, "atom", event.get_name())
-            assert event not in ongoing, f"event {event.get_name()} already in ongoing"
+
+            assert event not in ongoing, f"event {event} already in ongoing"
             ongoing.add(event)
 
 
@@ -792,18 +808,17 @@ def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, 
 
     current_members = {}
 
-    next_op = first(operations.values())
-    next_time = next_op.get_time()
+    first_op : Operation = first(operations.values())
 
 
     #TODO: Read Initial members from log
     initial_members = set()
 
-    if next_op.get_type() != "Join":
-        initial_members.add(next_op.node) 
+    if first_op.get_type() != "Join":
+        initial_members.add(first_op.node) 
 
     for node in initial_members:  
-            member = MemberStart(node, next_time, "M" + str(len(membership_intervals)))
+            member = MemberStart(node, first_op.get_time(), "M" + str(len(membership_intervals)))
 
             assert node not in current_members, f"Node {node} is already a member, current members:\n{current_members}"
 
@@ -812,32 +827,22 @@ def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, 
             membership_intervals[member.get_id()] = member
 
     # for op, next_op in pairwise(operations.values()):
-    op = None
-    next_op = None
-    for next_op in operations.values():
-        if op is None:
-            op = next_op
+    for op in operations.values():
         
-        next_time = next_op.get_time()
-
         # logging.debug(f"Processing operation {op.get_name()} at {next_time}")
 
-        infer_member_interval (op, next_time, operations, membership_intervals , current_members )
+        infer_member_interval(op,  operations, membership_intervals , current_members )
 
-        op = next_op
 
-    if next_op:
-        assert next_time is not None
-        # TODO: Temporary time padding for last operation
-
-        infer_member_interval (next_op, "9" + next_time, operations, membership_intervals , current_members )
 
     return membership_intervals
 
-def infer_member_interval (op: Operation, next_time: str, operations : dict[str, Operation], membership_intervals : dict[str, Interval], current_members : dict[str, Interval]):
+def infer_member_interval (op: Operation, operations : dict[str, Operation], membership_intervals : dict[str, Interval], current_members : dict[str, Interval]):
+        time = op.get_time()
+
         if op.get_type() in ("ReplyJoin", "JoinReply"):
             node = operations[op.get_id()].get_node()
-            member = MemberStart(node, next_time, "M" + str(len(membership_intervals)))
+            member = MemberStart(node, time, "M" + str(len(membership_intervals)))
 
             assert node not in current_members, f"Node {node} is already a member, current members:\n{current_members}"
 
@@ -850,9 +855,9 @@ def infer_member_interval (op: Operation, next_time: str, operations : dict[str,
             assert node in current_members, f"Node {node} is not a member, current members:\n{current_members}"
 
             start_member = current_members[node]
-            start_member.set_end_time(next_time)
+            start_member.set_end_time(time)
 
-            end_member = MemberEnd(node, next_time, start_member.id)
+            end_member = MemberEnd(node, time, start_member.id)
 
 
             membership_intervals["End-" + end_member.get_id()] = end_member
@@ -860,6 +865,128 @@ def infer_member_interval (op: Operation, next_time: str, operations : dict[str,
             del current_members[node]
 
 
+# remove operations that start before starting_line
+def remove_initial_intervals(
+    starting_time : str | None,
+    operations: dict[str, Operation],
+    stable_regimens: dict[str, Stable | StableEnd],
+    read_only_regimens: dict[str, ReadOnly | ReadOnlyEnd],
+    members: OrderedDict[str, MemberStart| MemberEnd],
+    ideal_states: OrderedDict[str, IdealStart | IdealEnd],
+    responsibility_intervals: dict[str, ResponsibleStart | ResponsibleEnd],
+    times : set[str]
+):
+    if starting_time is None:
+        return
+
+    for time in times.copy():
+        if time < starting_time:
+            times.remove(time)
+
+    initial_member = None
+    for (key, member) in members.copy().items():
+        if member.get_time() >= starting_time:
+            break
+
+        if type(member) == MemberStart and \
+            ((member.get_end_time() is None) or (member.get_end_time() >= starting_time)):
+
+            if initial_member is None:
+                initial_member = member.get_node()
+            #     member.set_time("0")
+            # else:
+            #     member.set_time(starting_time)
+            # member.set_time(starting_time)
+
+            member.set_time("0")
+
+        else:
+            del members[key]
+
+
+    for (key, stable) in stable_regimens.copy().items():
+        if stable.get_time() >= starting_time:
+            break
+        if type(stable) == Stable and \
+            ((stable.get_end_time() is None) or (stable.get_end_time() >= starting_time)):
+            stable.set_time(starting_time)
+        else:
+            del stable_regimens[key]
+
+
+    for (key, read_only) in read_only_regimens.copy().items():
+        if read_only.get_time() >= starting_time:
+            break
+        if type(read_only) == ReadOnly and \
+            ((read_only.get_end_time() is None) or (read_only.get_end_time() >= starting_time)):
+            read_only.set_time(starting_time)
+        else:
+            del read_only_regimens[key]
+
+    for (key, ideal) in ideal_states.copy().items():
+        if ideal.get_time() >= starting_time:
+            break
+        if type(ideal) == IdealStart and \
+            ((ideal.get_end_time() is None) or (ideal.get_end_time() >= starting_time)):
+            ideal.set_time(starting_time)
+        else:
+            del ideal_states[key]
+
+    for (key, responsible) in responsibility_intervals.copy().items():
+        if responsible.get_time() >= starting_time:
+            break
+        if type(responsible) == ResponsibleStart and \
+            ((responsible.get_end_time() is None) or (responsible.get_end_time() >= starting_time)):
+            responsible.set_time(starting_time)
+        else:
+            del responsibility_intervals[key]
+
+    key_value_pairs = set()
+    for (key, op) in operations.copy().items():
+        if op.get_time() >= starting_time:
+            break
+        
+        if  (not op.is_end()) and (op.get_end_time() is None) or (op.get_end_time() >= starting_time):
+        # if  (op.get_end_time() is None) or (op.get_end_time() >= starting_time):
+            # if op.is_end():
+            #     print(f"Uh oh {op}")
+                # assert false
+            # op.set_time(starting_time)
+
+            op.set_time("0")
+
+        else:
+
+            if isinstance(op, Store):
+                key_value_pairs.add( (op.get_key(), op.get_value()))
+
+
+            del operations[key]
+
+
+    # print(key_value_pairs)
+    counter = 0
+    if initial_member is not None:
+        for (key, value) in key_value_pairs:
+            # print(f"Adding initial store for {key} {value}")
+            id = f"initial_Store_{counter}"
+            # store = Store(starting_time, "Store",  id, counter, initial_member, key, value)
+            store = Store("0", "Store",  id, counter, initial_member, key, value)
+
+
+            # store.set_end_time(starting_time)
+            store.set_end_time("0")
+            store.set_replier(initial_member)
+            operations[store.get_id()] = store
+
+            reply = Reply("0", "Store", id, UNUSED_TAG, initial_member)
+            # reply = Reply(starting_time, "Store", id, UNUSED_TAG, initial_member)
+            operations["Reply-" + id] = reply
+            reply.set_end_time("0")
+
+
+
+            counter += 1
 
 def filter_operations(operations: OrderedDict[str, Operation], types: set[str]) -> OrderedDict[str, Operation]:
     for k, v in operations.copy().items():
@@ -892,7 +1019,12 @@ def main():
     )
 
     parser.add_argument(
-        "--max-lines", type=int, default=float("inf"), help="Maximum number of lines to process."
+        "--line-count", type=int, default=float("inf"), help="Number of lines to process."
+    )
+
+
+    parser.add_argument(
+        "--starting-line", type=int, default=0, help="Starting line number to process."
     )
 
     parser.add_argument(
@@ -956,7 +1088,8 @@ def main():
     model_file = os.path.abspath(model_file)
 
     with args.log.open("r", encoding="utf-8") as log:
-        nodes, keys, values, times, operations = read_log(log, max_lines=args.max_lines)
+        initial_time, nodes, keys, values, times, operations = read_log(log, args.starting_line,  args.line_count)
+
 
     logging.info(f" {len(nodes)} Nodes")
     logging.info(f" {len(values)} Values")
@@ -1031,8 +1164,8 @@ def main():
         operations = filter_operations(operations, operation_filter)
 
 
-    #### Detect ideal states and responsibility intervals if not required
-    ideal_states = {}
+    #### Detect ideal states and responsibility intervals if required
+    ideal_states: OrderedDict[str, IdealStart | IdealEnd] = OrderedDict()
     responsibility = {}
 
     if args.ideal or args.responsible:
@@ -1046,7 +1179,8 @@ def main():
         (ideal_states, responsibility) = ideal_function(args.ideal_log, limit_time, keys, operations, members)
 
         if not args.ideal:
-            ideal_states = {}
+            ideal_states = OrderedDict()
+
         if not args.responsible:
             responsibility = {}
 
@@ -1054,11 +1188,13 @@ def main():
     if not (args.all or args.membership):
         members = OrderedDict()
 
-    logging.info(f" {len(nodes)} Nodes")
-    logging.info(f" {len(values)} Values")
-    logging.info(f" {len(keys)} Keys")
-    logging.info(f" {len(operations)} operations and replies")
-    logging.info(f" {len(times)} operation timestamps")
+    remove_initial_intervals(initial_time ,operations, stable, readonly, members, ideal_states, responsibility, times)
+
+    logging.info(f"{len(nodes)} Nodes")
+    logging.info(f"{len(values)} Values")
+    logging.info(f"{len(keys)} Keys")
+    logging.info(f"{len(operations)} operations and replies")
+    logging.info(f"{len(times)} operation timestamps")
 
     logging.info(f"{len(members)} Member intervals")
     logging.debug(f"Membership intervals: {members}")
@@ -1111,10 +1247,8 @@ def main():
     logging.info(f"Total timestamps: {len(times)}")
 
 
-
     root = create_root()
     instance_template = create_instance(model_file, nodes, keys, values, times, operations, stable, readonly, members, ideal_states, responsibility)
-
 
     complete_trace(root, instance_template, operations, stable, readonly, members, ideal_states, responsibility)
     
@@ -1123,7 +1257,7 @@ def main():
 
     # Comment active flags in xml
     flag_names = ["all", "store", "lookup", "find", "membership", "read_only", "stable", "ideal", "responsible"]
-    # flag_list = [args.all, args.store, args.lookup, args.find, args.membership, args.read_only, args.stable, args.ideal, args.responsible]
+    flag_list = [args.all, args.store, args.lookup, args.find, args.membership, args.read_only, args.stable, args.ideal, args.responsible]
 
     active_flags = [name for name, value in zip(flag_names, flag_list) if value]
     comment_text = f"Active flags: {', '.join(active_flags) }"

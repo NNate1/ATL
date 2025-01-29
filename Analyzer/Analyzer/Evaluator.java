@@ -123,7 +123,7 @@ public class Evaluator {
 
 		}
 
-		System.out.println("Expressions to test: " + expressions);
+		// System.out.println("Expressions to test: " + expressions);
 		System.out.println("Loading trace...");
 		System.out.flush();
 		long startTime = System.nanoTime();

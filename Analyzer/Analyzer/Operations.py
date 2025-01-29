@@ -16,6 +16,9 @@ class Interval:
     def get_time(self):
         return self.start_time
 
+    def set_time(self, time: str):
+        self.start_time = time
+
     def set_end_time(self, end_time: str):
         self.end_time = end_time
     
@@ -182,6 +185,9 @@ class Operation:
     def get_time(self):
         return self.time
 
+    def set_time(self, time: str):
+        self.time = time
+
     def get_id(self):
         return self.id
 
@@ -215,6 +221,7 @@ class Reply(Operation):
         node = None,
     ):
         super().__init__(time, optype, id, tag, node or NO_REPLIER)
+        self.set_end_time(time)
 
     def get_node(self):
         assert self.node is not NO_REPLIER, "Missing reply node"
