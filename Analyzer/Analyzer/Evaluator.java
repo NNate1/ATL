@@ -145,11 +145,28 @@ public class Evaluator {
 			System.out.print(expression + ": ");
 
 			startTime = System.nanoTime();
+			var precondition = ans.eval(CompUtil.parseOneExpression_fromString(ansWorld,
+				expression + "Precondition"));
+
+			endTime = System.nanoTime();
+			double precondition_seconds = (endTime - startTime) / 1_000_000_000.0;
+
+
+			startTime = System.nanoTime();
 			Expr e = CompUtil.parseOneExpression_fromString(ansWorld, expression);
 			var result = ans.eval(e);
 			endTime = System.nanoTime();
 			elapsed_seconds = (endTime - startTime) / 1_000_000_000.0;
-			System.out.println(result.toString() + " " + elapsed_seconds + "s");
+
+
+
+
+			if (precondition.equals(Boolean.TRUE)){
+				System.out.println(result.toString() + " " + elapsed_seconds + "s");
+			}
+			else if (precondition.equals(Boolean.FALSE)) {
+				System.out.println("No scenario " + elapsed_seconds + "s precondition: " + precondition_seconds + "s" );
+			}
 		}
 	}
 }

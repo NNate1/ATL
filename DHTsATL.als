@@ -2,7 +2,6 @@
 // Copyright (C) 2024 Nuno Policarpo
 
 open ATL
-
 /*
  * Generic DHT model
  * Operations modelled as intervals
@@ -284,7 +283,7 @@ fact {
 
 	all op : FunctionalOperation | some member : Member {
 		op.node = member.node
-		Requires[member, op]
+		Requires[op, member]
 	}
 
 	all fail : Fail | some member : Member {
@@ -294,17 +293,17 @@ fact {
 	
 	all leave : Leave | some member : Member {
 		leave.node = member.node
-		Requires[member, leave]
+		Requires[leave, member]
 	}
 
 	// Nodes must not be members to join the network
 	all join : Join | no member : Member {
 		member.node = join.node
-		Requires[member, join]
+		--Intersects[join, member]
+		Requires[join, member]
 	}
 	
 }
-
 
 /*
  * Functional Properties of DHT Axiomatization
@@ -318,14 +317,13 @@ pred Axioms{
 	
 	// Key Properties
 	KeyConsistency
+	FindNodeLookupConsistency 
+	ResponsibilityExpiration
+	ResponsibilityTransfer 
+
+	// Structural Properties
 	Reachability
 	MembershipGuarantee 
-		
-	FindNodeLookupConsistency 
-
-	ResponsibilityTransfer 
-	ResponsibilityExpiration
-
 	TerminationCompleteness
 }
 
@@ -350,6 +348,9 @@ pred LookupConsistency {
 	}
 }
 
+pred LookupConsistencyPrecondition {
+	some lookup : Lookup | lookup.value != Bottom && Finite[lookup]
+}
 
 /* P2 Value Consistency
  * In an Ideal state during a ReadOnly regimen, all lookup
@@ -371,6 +372,18 @@ pred ValueConsistency {
 	}
 }
 
+pred ValueConsistencyPrecondition {
+	some disj lookup1, lookup2 : Lookup, 
+		readOnly : ReadOnlyRegimen, ideal : IdealState {
+			lookup1.key = lookup2.key
+			Finite[lookup1]
+			Finite[lookup2]
+			In[lookup1, readOnly] or Equal[lookup1, readOnly]
+			In[lookup2, readOnly] or Equal[lookup2, readOnly]
+			In[lookup1, ideal] or Equal[lookup1, ideal]
+			In[lookup2, ideal] or Equal[lookup2, ideal]
+		}
+}
 
 /* P3 Value Freshness
  * In an Ideal state all lookup operations for a key return the
@@ -407,6 +420,14 @@ pred ValueFreshness {
 
 }
 
+pred ValueFreshnessPrecondition {
+	some lookup: Lookup, ideal : IdealState {
+		lookup.value != Bottom
+		Finite[lookup]
+		In[lookup, ideal] or Equal[lookup, ideal]
+	}
+}
+
 /* P3 Weak Value Freshness
  * In an Ideal state and during a ReadOnly regimen, 
  * all lookup operations for a given key return the value written by the write
@@ -437,6 +458,15 @@ pred WeakValueFreshness {
 	}
 }
 
+pred WeakValueFreshnessPrecondition {
+	some lookup: Lookup, ideal : IdealState, readOnly : ReadOnlyRegimen {
+		lookup.value != Bottom
+		Finite[lookup]
+		In[lookup, ideal] or Equal[lookup, ideal]
+		In[lookup, readOnly] or Equal[lookup, readOnly]
+	}
+}
+
 /*
  * Key Properties
  */
@@ -460,6 +490,19 @@ pred KeyConsistency {
 		implies find1.responsible = find2.responsible
 	}
 }
+
+pred KeyConsistencyPrecondition{
+	some ideal : IdealState, stable : StableRegimen, disj find1, find2 : FindNode {
+		find1.key = find2.key
+		Finite[find1]
+		Finite[find2]
+		In[find1, ideal] or Equal[find1, ideal]
+		In[find2, ideal] or Equal[find2, ideal]
+		In[find1, stable] or Equal[find1, stable]
+		In[find2, stable] or Equal[find2, stable]
+	}
+}
+
 
 /* P5 FindNode Lookup Consistency
  * If the lookup of key k returns a value stored by node n,
@@ -485,6 +528,11 @@ pred FindNodeLookupConsistency {
 	}
 }
 
+pred FindNodeLookupConsistencyPrecondition {
+	some op: FindNode + Lookup | Finite[op]
+}
+
+
 /* P6 Responsibility Expiration
  * When a node fails and does not rejoin,
  * it eventually stops being responsible for any key
@@ -503,11 +551,39 @@ pred ResponsibilityExpiration {
 	}
 }
 
+pred ResponsibilityExpirationPrecondition {
+	some fail : Fail | no join : Join {
+			join.node = fail.node	
+			Precedes[fail, join]
+	}
+}
+
 
 /* P7 Responsibility Transfer
  * When a node leaves the network
  * it immediately ceases to be responsible for any key
  */
+pred ResponsibilityTransfer{
+	all leave: Leave, n : Leave.node {
+		no find: FindNode, join : Join {
+			find.responsible = n
+			join.node = n
+
+			Precedes[leave, find]
+			Precedes[find, join]
+
+		}
+	}
+}
+
+pred ResponsibilityTransferPrecondition{
+	some leave: Leave, n : Leave.node, find : FindNode {
+		find.responsible = n
+		Precedes[leave, find]
+	}
+}
+
+/*
 pred ResponsibilityTransfer{
 	all leave: Leave, n : Leave.node {
 		(no join : Join {
@@ -519,7 +595,7 @@ pred ResponsibilityTransfer{
 			Precedes[leave, find]
 		}
 	}
-}
+}*/
 
 
 /*
@@ -536,7 +612,7 @@ pred MembershipGuarantee {
 	MembershipGuarantee_Responsible
 	MembershipGuarantee_Replier
 }
-	
+
 /*pred MembershipGuarantee_FindNode {
 	all find: FindNode {
 		Finite[find] implies
@@ -554,6 +630,7 @@ pred MembershipGuarantee_Responsible {
 				member.node = find.responsible
 				Initial[member]
 				no exit : Leave + Fail {
+					exit.node = find.responsible
 					Precedes[exit, find]
 				}
 			})
@@ -564,6 +641,7 @@ pred MembershipGuarantee_Responsible {
 				)
 				j.node = find.responsible
 				no exit : Leave + Fail {
+					exit.node = find.responsible
 					Precedes[j, exit]
 					Precedes[exit, find]
 
@@ -577,6 +655,10 @@ pred MembershipGuarantee_Responsible {
 			})
 		}
 	}
+}
+
+pred MembershipGuarantee_ResponsiblePrecondition {
+	some find: FindNode | Finite[find]
 }
 
 /*
@@ -597,6 +679,7 @@ pred MembershipGuarantee_Replier {
 				member.node = op.replier
 				Initial[member]
 				no exit : Leave + Fail {
+					exit.node = op.replier
 					Precedes[exit, op]
 				}
 			})
@@ -607,6 +690,7 @@ pred MembershipGuarantee_Replier {
 				)
 				j.node = op.replier
 				no exit : Leave + Fail {
+					exit.node =op.replier
 					Precedes[j, exit]
 					Precedes[exit, op]
 
@@ -622,6 +706,9 @@ pred MembershipGuarantee_Replier {
 	}
 }
 
+pred MembershipGuarantee_ReplierPrecondition {
+	some op: FunctionalOperation | Finite[op]
+}
 
 /* P9 Reachability
  * If a node n is a member during an Ideal state, 
@@ -642,6 +729,15 @@ pred Reachability {
 	}
 }
 
+pred ReachabilityPrecondition {
+	some findNode: FindNode, n : Node & findNode.key, ideal : IdealState, member : Member {
+		Finite[findNode]
+		member.node = n
+		In[ideal, member] or Equal[ideal, member]
+		In[findNode, ideal] or Equal[findNode, ideal]
+	}
+}
+
 
 /* P10 Termination Completeness
  * During an infinite Stable regimen
@@ -654,10 +750,16 @@ pred TerminationCompleteness {
 	}
 }
 
+pred TerminationCompletenessPrecondition {
+	some op: FunctionalOperation, stable : StableRegimen {
+		not Finite[stable] and In[op, stable]
+	}
+}
+
 /* 
  * Runs
  */
-
+/*
 run Empty {} for 2  but 0 Key, 0 Value
 run Member {
 	Axioms
@@ -795,6 +897,7 @@ run S7_ConcurrentLookupStore {
 		Finite[lookup]
 		Finite[store]
 		Intersects[lookup, store]
+		lookup.value = store.value
 	}
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
 
@@ -830,7 +933,7 @@ run S9_FindNode_After_Fail{
 	}
 } for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 1
 
-	
+
 run S10_Find_Node_of_Departed_Node {
 	Axioms
 	some leave: Leave, find: FindNode {

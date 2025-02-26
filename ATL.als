@@ -242,7 +242,7 @@ pred Intersects[i1 : Interval, i2 : Interval] {
 	Overlap[i2,i1]
 }
 
-// Requires(i1, i2): Interval i2 starts while i1 is ongoing
+// Requires(i1, i2): Interval i1 starts while i2 is ongoing
 // 	i.e i1 requires i2 to be ongoing in order to start;
 pred Requires[i1 : Interval, i2 : Interval] {
 	Equal[i1, i2] or In[i1, i2] or 
