@@ -516,14 +516,14 @@ pred FindNodeLookupConsistency {
 		Finite[find] implies some r : Responsible {
 			r.node = find.responsible
 			find.key in r.key
-			Intersects[r, find]
+			Intersects[r, find] or Precedes[r, find]
 		}
 	}
 	all look: Lookup{
 		Finite[look] implies some r : Responsible {
 			r.node = look.replier
 			look.key in r.key
-			Intersects[r, look]
+			Intersects[r, look] or Precedes[r, look]
 		}
 	}
 }
@@ -545,7 +545,7 @@ pred ResponsibilityExpiration {
 		})
 		
 		implies no r : Responsible {
-			fail.node = r.node 
+			fail.node = r.node
 			not Finite[r]
 		}
 	}
@@ -563,7 +563,53 @@ pred ResponsibilityExpirationPrecondition {
  * When a node leaves the network
  * it immediately ceases to be responsible for any key
  */
+
+pred ResponsibilityTransferV2{
+	all leave: Leave, n : Leave.node, find : FindNode {
+		(
+		find.responsible = n and
+		Precedes[leave, find]
+		)
+		implies
+		(
+		some join : Join {
+			join.node = n
+			Precedes[find, join]
+		})
+	}
+}
+
+pred ResponsibilityTransferV3{
+	all leave: Leave, n : Leave.node, find : FindNode {
+		(
+		find.responsible = n and
+		Precedes[leave, find]
+		)
+		implies
+		(
+		some join : Join {
+			join.node = n
+			Precedes[join, find]
+			Precedes[leave, join]
+		})
+	}
+}
+
 pred ResponsibilityTransfer{
+	all leave: Leave, n : Leave.node {
+		(no join : Join {
+			Precedes[leave, join]
+			join.node = leave.node // Was missing
+		})
+		implies no find: FindNode {
+			find.responsible = n
+
+			Precedes[leave, find]
+		}
+	}
+}
+
+/*pred ResponsibilityTransfer{
 	all leave: Leave, n : Leave.node {
 		no find: FindNode, join : Join {
 			find.responsible = n
@@ -574,7 +620,9 @@ pred ResponsibilityTransfer{
 
 		}
 	}
-}
+}*/
+
+
 
 pred ResponsibilityTransferPrecondition{
 	some leave: Leave, n : Leave.node, find : FindNode {
@@ -583,19 +631,14 @@ pred ResponsibilityTransferPrecondition{
 	}
 }
 
-/*
-pred ResponsibilityTransfer{
-	all leave: Leave, n : Leave.node {
-		(no join : Join {
-			Precedes[leave, join]
-		})
-		implies no find: FindNode {
-			find.responsible = n
 
-			Precedes[leave, find]
-		}
-	}
-}*/
+pred ResponsibilityTransferV2Precondition{
+	ResponsibilityTransferPrecondition
+}
+
+pred ResponsibilityTransferV3Precondition{
+	ResponsibilityTransferPrecondition
+}
 
 
 /*
@@ -609,10 +652,31 @@ pred ResponsibilityTransfer{
  * at one instant during the execution of the operation
  */
 pred MembershipGuarantee {
-	MembershipGuarantee_Responsible
-	MembershipGuarantee_Replier
+	all find: FindNode {
+		Finite[find] implies
+			some member : Member {
+				member.node = find.responsible
+	
+				(Intersects[find, member] or
+					Precedes[member, find])
+			}
+	}
+	all op: FunctionalOperation {
+		Finite[op] implies
+			some member : Member {
+				member.node = op.replier
+				(Intersects[op, member] or
+					Precedes[member, op])
+			}
+	}
+	--MembershipGuarantee_Responsible
+	--MembershipGuarantee_Replier
 }
-
+/*
+check MemberCheck{
+ (MembershipGuarantee_Responsible and MembershipGuarantee_Replier) implies MembershipGuarantee
+} for 10 Interval, 15 Boundary, 5 Key, 5 Value, 0 Proposition expect 0 
+*/
 /*pred MembershipGuarantee_FindNode {
 	all find: FindNode {
 		Finite[find] implies
@@ -711,7 +775,7 @@ pred MembershipGuarantee_ReplierPrecondition {
 }
 
 /* P9 Reachability
- * If a node n is a member during an Ideal state, 
+ * If a node n is a member during an Ideal state,
  * then all findNode operations of the key that has 
  * the same value of the identifier of n must return n.
  */
@@ -721,8 +785,9 @@ pred Reachability {
 			Finite[findNode]
 			some ideal : IdealState, member : Member {
 				member.node = n
-				In[ideal, member] or Equal[ideal, member]
+				In[member, ideal] or Equal[member, ideal]
 				In[findNode, ideal] or Equal[findNode, ideal]
+				-- In[findNode, member] or Equal[findNode, member]
 			}
 		}
 		implies findNode.responsible = n
@@ -733,7 +798,7 @@ pred ReachabilityPrecondition {
 	some findNode: FindNode, n : Node & findNode.key, ideal : IdealState, member : Member {
 		Finite[findNode]
 		member.node = n
-		In[ideal, member] or Equal[ideal, member]
+		In[member, ideal] or Equal[member, ideal]
 		In[findNode, ideal] or Equal[findNode, ideal]
 	}
 }
