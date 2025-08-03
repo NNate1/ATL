@@ -14,7 +14,8 @@ module ATL
  *
  * Variable Signatures:
  *     - Happens 
- *     - Ongoing 
+ *     - Ongoing
+ * 	   - Active 
  * 
  * Concrete Signatures for testing
  * 		- T : Interval
@@ -99,21 +100,19 @@ pred Initial[i : Interval] {
  */
 fact { 
 
+	// Initial ongoing intervals are starting
+	Ongoing = Starting
+
 	// Ongoing intervals in the next state are those that start and
 	// the non-terminating currently ongoing intervals
 	always{
 		Ongoing' = Ongoing + Starting' - Ending
-		(Starting + Ending) in Ongoing
+		Ending in Ongoing
 	}
-
-	// Intervals start only if they were previously not ongoing
-	all i : Interval | always (i in Starting' implies i not in Ongoing)
-
+	
 	// Intervals do not repeat
-	all i : Interval | always (Ending[i] implies after always not Starting[i])
+	all b : Boundary | always (b in Happens implies after always not b in Happens)
 }
-
-
 
 // Scope limiting facts
 fact {
@@ -123,7 +122,6 @@ fact {
 
 	// All boundaries belong to an interval
 	Boundary in Interval.(start+end)
-
 }
 
 
