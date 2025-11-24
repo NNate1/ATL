@@ -3,14 +3,14 @@ import logging
 import xml.etree.ElementTree as ET
 import importlib
 import os
+import re
 
-from xml.dom import minidom
-from copy import copy, deepcopy
+from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
 # from itertools import pairwise
 from typing import OrderedDict,  cast
-from pprint import pprint
+from datetime import datetime, timedelta
 
 from Operations import (
     NO_NODE,
@@ -483,14 +483,21 @@ def read_log(log: TextIOWrapper, starting_line, line_count) -> tuple[str | None,
 
     for line in log:
 
+        if line_counter == starting_line:
+            logging.info(f"Starting line: |{line}|")
+
+        if line_counter == max_lines < 1:
+            logging.info(f"Last included line: |{line}|")
+
         if line_counter >= max_lines:
+            logging.info(f"Excluded line: |{line}|")
             break
         line_counter += 1
 
         components = list(map(lambda x: x.strip(","), line.strip().split(", ")))
 
 
-        # logging.debug(f"line {line_count} {components}")
+        logging.debug(f"line {line_counter} {components}")
 
         time, optype = components[0:2]
         times.add(time)
@@ -660,7 +667,7 @@ def complete_trace(
         if counter % 100 == 0:
             logging.info(f"Generating event {counter}/{len(events)}")
 
-        # logging.debug(f"event {event.get_name()} at {event.get_time()}")
+        logging.debug(f"event {event.get_name()} at {event.get_time()}")
         # logging.debug(f"Ongoing: {ongoing}")
 
         if event.get_time() != prev:
@@ -839,8 +846,15 @@ def detect_members(operations: OrderedDict[str, Operation]) -> OrderedDict[str, 
 
 def infer_member_interval (op: Operation, operations : dict[str, Operation], membership_intervals : dict[str, Interval], current_members : dict[str, Interval]):
         time = op.get_time()
+        format = "%Y-%m-%d %H:%M:%S.%f"
+        dt = datetime.strptime(time, format)
+        new_dt = dt + timedelta(milliseconds=1) 
+
+        # logging.debug(f"{time = }->{new_dt = }")
+        time = new_dt.strftime(format)    
 
         if op.get_type() in ("ReplyJoin", "JoinReply"):
+
             node = operations[op.get_id()].get_node()
             member = MemberStart(node, time, "M" + str(len(membership_intervals)))
 
@@ -879,7 +893,17 @@ def remove_initial_intervals(
     if starting_time is None:
         return
 
+
+    format = "%Y-%m-%d %H:%M:%S.%f"
+    dt = datetime.strptime(starting_time, format)
+
+    if dt.microsecond <= 50000:
+        dt = dt - timedelta(seconds=1) 
+    new_dt = dt.replace(microsecond=0)
+
+    default_date = new_dt.strftime(format)    
     for time in times.copy():
+
         if time < starting_time:
             times.remove(time)
 
@@ -898,7 +922,7 @@ def remove_initial_intervals(
             #     member.set_time(starting_time)
             # member.set_time(starting_time)
 
-            member.set_time("0")
+            member.set_time(default_date)
 
         else:
             del members[key]
@@ -953,7 +977,7 @@ def remove_initial_intervals(
                 # assert false
             # op.set_time(starting_time)
 
-            op.set_time("0")
+            op.set_time(default_date)
 
         else:
 
@@ -971,18 +995,18 @@ def remove_initial_intervals(
             # print(f"Adding initial store for {key} {value}")
             id = f"initial_Store_{counter}"
             # store = Store(starting_time, "Store",  id, counter, initial_member, key, value)
-            store = Store("0", "Store",  id, counter, initial_member, key, value)
+            store = Store(default_date, "Store",  id, counter, initial_member, key, value)
 
 
             # store.set_end_time(starting_time)
-            store.set_end_time("0")
+            store.set_end_time(default_date)
             store.set_replier(initial_member)
             operations[store.get_id()] = store
 
-            reply = Reply("0", "Store", id, UNUSED_TAG, initial_member)
+            reply = Reply(default_date, "Store", id, UNUSED_TAG, initial_member)
             # reply = Reply(starting_time, "Store", id, UNUSED_TAG, initial_member)
             operations["Reply-" + id] = reply
-            reply.set_end_time("0")
+            reply.set_end_time(default_date)
 
 
 
@@ -997,12 +1021,39 @@ def filter_operations(operations: OrderedDict[str, Operation], types: set[str]) 
 
 def get_ideal_responsible(ideal_log: Path, limit_time: str, keys: set[str], operations: OrderedDict[str, Operation], member_intervals: OrderedDict[str, MemberStart| MemberEnd]) -> tuple[dict, dict]:
 
-    raise NotImplementedError("Ideal state detection not implemented")
+    raise NotImplementedError("Ideal state detection requires a custom external module")
+
+def find_log_file(directory : str):
+    """Finds the first .log file that does NOT end with 'successor.log'"""
+    for file in os.listdir(directory):
+        if file.endswith(".log") and not file.endswith("successor.log"):
+            return os.path.join(directory, file)
+    raise FileNotFoundError("No log file found (expected a .log file not ending in 'successor.log')")
+
+def find_successor_file(directory : str):
+    """Finds the first file that ends with 'successor.log'"""
+    for file in os.listdir(directory):
+        if file.endswith("successor.log"):
+            return os.path.join(directory, file)
+    raise FileNotFoundError("No successor file found (expected a file ending in 'successor.log')")
+
+
+def file_path(path: str) -> str:
+    if os.path.isfile(path):
+        return path
+    raise argparse.ArgumentTypeError(f"Aborting: '{path}' is not a valid file")
+
+
+def dir_path(path: str) -> str:
+    if os.path.isdir(path):
+        return path
+    raise argparse.ArgumentTypeError(f"Aborting: '{path}' is not a valid directory")
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-f", required=True, dest='log', type=Path, help="Path to the log file to process."
+        "-f", "--file", dest='log', type=file_path, help="Path to the log file to process."
     )
 
     parser.add_argument(
@@ -1010,26 +1061,33 @@ def main():
     )
 
     parser.add_argument(
-        "-i", required=True, dest='ideal_log', type=Path, help="Path to the log file with ideal state information"
+        "-i", "--ideal-log", dest='ideal_log', type=file_path, help="Path to the log file with ideal state information"
     )
 
+
+    parser.add_argument("-d", "--directory", type=dir_path, help="Path to the directory with log and ideal state information file")
 
     parser.add_argument(
         "-p", "-ip", required=True, dest='ideal_parser', type=Path, help="Path to the python file which can parse the ideal state information"
     )
 
     parser.add_argument(
-        "--line-count", type=int, default=float("inf"), help="Number of lines to process."
+         "--line-count", "--count", type=int, default=float("inf"), help="Number of lines to process."
     )
 
-
     parser.add_argument(
-        "--starting-line", type=int, default=0, help="Starting line number to process."
+         "--starting-line", "--start", type=int, default=0, help="Starting line number to process."
     )
 
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging."
     )
+
+
+    parser.add_argument(
+        "--visualize", "--visual", "--graph", action="store_true", help="Enable verbose logging."
+    )
+
 
     parser.add_argument(
         "-store", action="store_true", help="Add store operation information to the trace."
@@ -1068,6 +1126,8 @@ def main():
         "-all", action = "store_true", help="Add all information to the trace."
     )
 
+
+
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -1087,7 +1147,25 @@ def main():
 
     model_file = os.path.abspath(model_file)
 
-    with args.log.open("r", encoding="utf-8") as log:
+    
+    if args.directory:
+        if args.log:
+            logging.warning("\"--file\" overrides log file from \"--directory\"")
+        else:
+            args.log = find_log_file(args.directory)
+        if args.ideal_log:
+            logging.warning("\"--ideal-log\" overrides ideal file from \"--directory\"")
+        else:
+            args.ideal_log = find_successor_file(args.directory)
+    
+    if not args.log:
+        raise ValueError("The path to the chord log file must be specified if --directory is not used.")
+
+    logging.info(f"\nUsing log file: {args.log}")
+    logging.info(f"Using successors file: {args.ideal_log}\n" if args.ideal_log else "Not using a successors file\n")
+
+    args.starting_line = max(0, args.starting_line)
+    with open(args.log,"r", encoding="utf-8") as log:
         initial_time, nodes, keys, values, times, operations = read_log(log, args.starting_line,  args.line_count)
 
 
@@ -1261,10 +1339,35 @@ def main():
 
     active_flags = [name for name, value in zip(flag_names, flag_list) if value]
     comment_text = f"Active flags: {', '.join(active_flags) }"
-    comment_bytes = f'<!-- {comment_text} -->\n'.encode('utf-8')
+    comment_flag_bytes = f'<!-- {comment_text} -->\n'.encode('utf-8')
+
+    original_trace_length = len(operations)
+    processed_trace_length = (len(operations) + 
+                                len(stable) + 
+                                len(readonly) + 
+                                len(members) + 
+                                len(ideal_states) + 
+                                len(responsibility)
+                            )
+
+    search_result = re.search(r"(\d+)nodes", args.log) 
+    max_nodes = len(nodes) if search_result is None else search_result.group(1)
+
+    info_text = " ".join((
+        f"line_count={args.line_count}",
+        f"original_trace_length={original_trace_length}",
+        f"processed_trace_length={processed_trace_length}",
+        f"nodes={len(nodes)}",
+        f"max_nodes={max_nodes}",
+        # f"fail={args.fail}"
+        # f"leave={args.leave}"
+    ))
+   
+    info_comment_bytes = f'<!-- {info_text} -->\n'.encode('utf-8')
 
     with open(args.output, 'wb') as f:
-        f.write(comment_bytes)
+        f.write(info_comment_bytes)
+        f.write(comment_flag_bytes)
         tree.write(f, encoding="utf-8", xml_declaration=False)
         logging.info(f"XML trace successfully written to {args.output}")
 

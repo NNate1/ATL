@@ -73,9 +73,7 @@ def update_responsibilites(pointers: dict[str, Pointer], all_keys: set[str], ong
             new_responsibilities[node] = all_keys
             continue
 
-        new_keys = new_responsibilities.get(succ, set())
-        new_responsibilities[succ] = new_keys
-
+        new_keys = new_responsibilities.setdefault(succ, set())
 
 
         # print(f"Node {node}, succ {succ}")
@@ -137,8 +135,12 @@ def get_ideal_responsible(ideal_log: Path, limit_time: str, all_keys: set[str], 
 
     with open(ideal_log, 'r') as f:
         for line in f:
-            time, _, member, succ = line.strip().split(', ')
+
+            components = line.strip().split(', ')
             
+            assert len(components) == 4, f"Expected successor entry with 4 components, got {len(components)}, line: \"{line}\""
+            time, _, member, succ = components
+
             ## Infer current members
             while member_iter < len(member_list) and member_list[member_iter].get_time() < time:
                 membership_node = member_list[member_iter].get_node()
