@@ -42,11 +42,20 @@ class Interval:
     def __repr__(self):
         return str(self)
 
+    def visualize(self):
+        return self.get_name()
+
 class ReadOnly(Interval):
     def __init__(self, time: str, id : str):
         super().__init__(time, id)
+
     def get_name(self):
         return f"ReadOnly${self.id}"
+
+
+    def visualize(self):
+        return f"ReadOnly"
+    
 
 class ReadOnlyEnd(Interval):
     def __init__(self, time: str, id : str):
@@ -64,6 +73,8 @@ class Stable(Interval):
 
     def get_name(self):
         return f"Stable${self.id}"
+
+
 
 class StableEnd(Interval):
     def __init__(self, time: str, id : str):
@@ -136,6 +147,9 @@ class ResponsibleStart(Interval):
 
     def __str__(self):
         return f"{super().__str__()} Node: {self.node} keys ({len(self.keys)}): {self.keys}"
+
+    def visualize(self):
+        return f"Responsible-{self.node}-{self.keys}"
 
 class ResponsibleEnd(Interval):
     def __init__(self, node : str, keys : set[str], time: str, id : str):
@@ -289,6 +303,13 @@ class Store(FunctionalOperation):
     def str(self):
         return f"{super().__str__()}, value: {self.value}"
 
+    def visualize(self):
+        out =  f"Store({self.node}, {self.key}, {self.value})"
+
+        if self.replier is not None:
+            out += f" -> {self.replier}"
+
+        return out
 
 class Lookup(FunctionalOperation):
     def __init__(
@@ -317,6 +338,11 @@ class Lookup(FunctionalOperation):
     def __str__(self):
         return f"{super().__str__()}, value: {self.value}"
 
+    def visualize(self):
+        out = f"Lookup({self.node}, {self.key})" 
+        if self.value is not None:
+            out += f" -> ({self.replier}, {self.value})"
+        return out 
 
 class FindNode(FunctionalOperation):
     def __init__(
@@ -347,6 +373,14 @@ class FindNode(FunctionalOperation):
         return f"{super().__str__()}, responsible: {self.responsible}"
 
 
+    def visualize(self):
+        out = f"FindNode({self.node}, {self.key})" 
+        if self.replier is not None:
+            out += f" -> ({self.replier}, {self.responsible})"
+
+        return out
+
+
 class Join(Operation):
     def __init__(
         self,
@@ -359,6 +393,10 @@ class Join(Operation):
     ):
         super().__init__(time, optype, id, tag, node, end_time)
 
+
+    def visualize(self):
+        return f"Join({self.node})"
+        
 
 class Leave(Operation):
     def __init__(
@@ -373,6 +411,9 @@ class Leave(Operation):
         super().__init__(time, optype, id, tag, node, end_time)
 
 
+    def visualize(self):
+        return f"Leave({self.node})"
+
 class Fail(Operation):
     def __init__(
         self,
@@ -384,3 +425,7 @@ class Fail(Operation):
     ):
         super().__init__(time, optype, id, tag, node)
         self.end_time = time
+
+
+    def visualize(self):
+        return f"Fail({self.node})"

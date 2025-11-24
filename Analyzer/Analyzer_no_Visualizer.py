@@ -3,16 +3,15 @@ import logging
 import xml.etree.ElementTree as ET
 import importlib
 import os
-import re
-
 from copy import deepcopy
 from io import TextIOWrapper
 from pathlib import Path
 # from itertools import pairwise
 from typing import OrderedDict,  cast
+
 from datetime import datetime, timedelta
 
-import Visualizer 
+# import Visualizer 
 from Operations import (
     NO_NODE,
     NO_VALUE,
@@ -484,14 +483,7 @@ def read_log(log: TextIOWrapper, starting_line, line_count) -> tuple[str | None,
 
     for line in log:
 
-        if line_counter == starting_line:
-            logging.info(f"Starting line: |{line}|")
-
-        if line_counter == max_lines < 1:
-            logging.info(f"Last included line: |{line}|")
-
         if line_counter >= max_lines:
-            logging.info(f"Excluded line: |{line}|")
             break
         line_counter += 1
 
@@ -1162,6 +1154,10 @@ def main():
     if not args.log:
         raise ValueError("The path to the chord log file must be specified if --directory is not used.")
 
+
+    if not args.log:
+        raise ValueError("The path to the chord log file must be specified if --directory is not used.")
+
     logging.info(f"\nUsing log file: {args.log}")
     logging.info(f"Using successors file: {args.ideal_log}\n" if args.ideal_log else "Not using a successors file\n")
 
@@ -1351,19 +1347,13 @@ def main():
                                 len(responsibility)
                             )
 
-    search_result = re.search(r"(\d+)nodes", args.log) 
-    max_nodes = len(nodes) if search_result is None else search_result.group(1)
-
-    info_text = " ".join((
-        f"line_count={args.line_count}",
-        f"original_trace_length={original_trace_length}",
-        f"processed_trace_length={processed_trace_length}",
-        f"nodes={len(nodes)}",
-        f"max_nodes={max_nodes}",
+    info_text = (
+        f"original_trace_length={original_trace_length} "
+        f"processed_trace_length={processed_trace_length} "
+        f"nodes={len(nodes)}"
         # f"fail={args.fail}"
         # f"leave={args.leave}"
-    ))
-   
+    )
     info_comment_bytes = f'<!-- {info_text} -->\n'.encode('utf-8')
 
     with open(args.output, 'wb') as f:
@@ -1378,7 +1368,7 @@ def main():
    
     if args.visualize:
         intervals = operations | stable | readonly | members | ideal_states | responsibility
-        Visualizer.visualize_intervals(intervals, use_fixed_colors=True)
+        # Visualizer.visualize_intervals(intervals, use_fixed_colors=True)
 
 if __name__ == "__main__":
     main()
